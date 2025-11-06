@@ -1,20 +1,43 @@
-import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
+// App.js
+import React from 'react';
+import { NavigationContainer } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 
-export default function App() {
+// Import all screen components
+import MainMenuScreen from './MainMenuScreen'; // The screen with all the buttons
+import SettingsScreen from './SettingsScreen'; 
+import CollectionScreen from './CollectionScreen';
+import JournalScreen from './JournalScreen';
+import BattleScreen from './BattleScreen';
+import CameraScreen from './CameraScreen';
+import LoadoutScreen from './LoadoutScreen';
+
+const Stack = createNativeStackNavigator();
+
+function App() {
   return (
-    <View style={styles.container}>
-      <Text>Open up App.js to start working on your app!</Text>
-      <StatusBar style="auto" />
-    </View>
+    <NavigationContainer>
+      <Stack.Navigator initialRouteName="Home">
+        
+        {/* The main screen showing all the custom buttons. No header is needed here. */}
+        <Stack.Screen 
+          name="Home" 
+          component={MainMenuScreen} 
+          options={{ headerShown: false }} 
+        />
+        
+        {/* All destination screens. These will automatically have a header and back button (as seen in your Settings image) */}
+        <Stack.Screen name="Settings" component={SettingsScreen} />
+        <Stack.Screen name="Collection" component={CollectionScreen} />
+        <Stack.Screen name="Journal" component={JournalScreen} />
+        <Stack.Screen name="Battle" component={BattleScreen} />
+        <Stack.Screen name="Camera" component={CameraScreen} />
+        <Stack.Screen name="Loadout" component={LoadoutScreen} />
+        
+      </Stack.Navigator>
+    </NavigationContainer>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
+export default App;
