@@ -11,7 +11,7 @@
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
     "@react-native-async-storage/async-storage": "^2.1.0",
-    "@react-native-community/slider": "^5.1.0",
+    "@react-native-community/slider": "^5.1.1",
     "@react-native-vector-icons/evil-icons": "^12.4.0",
     "@react-native-vector-icons/fontawesome6": "^12.3.0",
     "@react-navigation/bottom-tabs": "^7.8.1",
