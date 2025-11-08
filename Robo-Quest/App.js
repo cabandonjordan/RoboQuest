@@ -5,6 +5,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 
 // Import all screen components
+import TitleScreen from './TitleScreen';
 import MainMenuScreen from './MainMenuScreen'; // The screen with all the buttons
 import SettingsScreen from './SettingsScreen'; 
 import CollectionScreen from './CollectionScreen';
@@ -38,6 +39,7 @@ function App() {
         <Stack.Screen name="Loadout" component={LoadoutScreen} />
         <Stack.Screen name="Result" component={ResultScreen} />
         <Stack.Screen name="Analyze" component={AnalyzeScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="TitleScreen" component={TitleScreen} options={{ headerShown: false }} />
         
       </Stack.Navigator>
     </NavigationContainer>

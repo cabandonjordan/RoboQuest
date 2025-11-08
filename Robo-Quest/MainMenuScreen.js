@@ -34,6 +34,13 @@ function MainMenuScreen() {
     <SafeAreaView style={styles.safeArea}>
       
       <TouchableOpacity 
+        style={styles.titleButton} 
+        onPress={() => navigation.navigate('TitleScreen')}
+      >
+        <Text style={styles.titleButtonText}>Back to Title Screen</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity 
         style={styles.settingsIcon} 
         onPress={() => navigation.navigate('Settings')}
       >
@@ -91,6 +98,21 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: '#fff',
+  },
+  titleButton: {
+    position: 'absolute',
+    top: 50,
+    left: 20,
+    zIndex: 10,
+    backgroundColor: '#7C8808',
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  titleButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
   },
   settingsIcon: {
     position: 'absolute',
