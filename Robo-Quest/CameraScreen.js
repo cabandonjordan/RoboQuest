@@ -3,14 +3,15 @@ import { View, Text, StyleSheet, TouchableOpacity, Alert, Image } from 'react-na
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
-import Slider from '@react-native-community/slider';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useNavigation } from '@react-navigation/native';
 
 function CameraScreen() {
+  const navigation = useNavigation();
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [mediaPermission, requestMediaPermission] = ImagePicker.useMediaLibraryPermissions();
   const [photo, setPhoto] = useState(null);
   const [facing, setFacing] = useState('back');
-  const [zoom, setZoom] = useState(0);
   const cameraRef = useRef(null);
 
   useEffect(() => {
@@ -81,27 +82,43 @@ function CameraScreen() {
     setPhoto(null);
   };
 
-  const confirmPhoto = () => {
-    Alert.alert('Photo Ready', 'Navigate to your results screen here.');
+  const confirmPhoto = async () => {
+    if (!photo) return;
+
+    try {
+      // Get existing photos from storage
+      const existingPhotosJson = await AsyncStorage.getItem('journalPhotos');
+      const existingPhotos = existingPhotosJson ? JSON.parse(existingPhotosJson) : [];
+
+      // Add new photo with timestamp
+      const photoEntry = {
+        uri: photo.uri,
+        timestamp: new Date().toISOString(),
+        id: Date.now().toString(),
+      };
+
+      existingPhotos.unshift(photoEntry); // Add to beginning of array
+
+      // Save back to storage
+      await AsyncStorage.setItem('journalPhotos', JSON.stringify(existingPhotos));
+
+      Alert.alert('Photo Saved', 'Photo has been saved to your journal!', [
+        {
+          text: 'OK',
+          onPress: () => {
+            setPhoto(null);
+            navigation.navigate('Journal');
+          },
+        },
+      ]);
+    } catch (error) {
+      console.error('Error saving photo:', error);
+      Alert.alert('Save Failed', 'Unable to save photo to journal.');
+    }
   };
 
   const toggleCameraFacing = () => {
     setFacing((current) => (current === 'back' ? 'front' : 'back'));
-  };
-
-  const clampZoom = (value) => {
-    return Math.min(Math.max(value, 0), 1);
-  };
-
-  const adjustZoom = (delta) => {
-    setZoom((prev) => {
-      const next = clampZoom(prev + delta);
-      return Number(next.toFixed(3));
-    });
-  };
-
-  const handleZoomSlider = (value) => {
-    setZoom(clampZoom(value));
   };
 
   return (
@@ -114,7 +131,6 @@ function CameraScreen() {
             ref={cameraRef}
             style={styles.cameraPreview}
             facing={facing}
-            zoom={zoom}
             enableZoomGesture
           />
         )}
@@ -130,31 +146,7 @@ function CameraScreen() {
           </TouchableOpacity>
         </View>
       ) : (
-        <>
-          <View style={styles.zoomControls}>
-            <TouchableOpacity style={styles.zoomButton} onPress={() => adjustZoom(-0.1)}>
-              <Ionicons name="remove" size={24} color="#FFFFFF" />
-            </TouchableOpacity>
-            <View style={styles.zoomSliderWrapper}>
-              <Slider
-                style={styles.zoomSlider}
-                value={zoom}
-                minimumValue={0}
-                maximumValue={1}
-                step={0.01}
-                minimumTrackTintColor="#FFFFFF"
-                maximumTrackTintColor="rgba(255, 255, 255, 0.3)"
-                thumbTintColor="#FFFFFF"
-                onValueChange={handleZoomSlider}
-              />
-              <Text style={styles.zoomLabel}>{`${Math.round(zoom * 100)}%`}</Text>
-            </View>
-            <TouchableOpacity style={styles.zoomButton} onPress={() => adjustZoom(0.1)}>
-              <Ionicons name="add" size={24} color="#FFFFFF" />
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.bottomBar}>
+        <View style={styles.bottomBar}>
             <TouchableOpacity style={styles.iconButton} onPress={pickImage}>
               <Ionicons name="images-outline" size={28} color="#FFFFFF" />
             </TouchableOpacity>
@@ -167,7 +159,6 @@ function CameraScreen() {
               <Ionicons name="camera-reverse" size={28} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
-        </>
       )}
     </View>
   );
@@ -185,31 +176,6 @@ const styles = StyleSheet.create({
   cameraPreview: {
     width: '100%',
     height: '100%',
-  },
-  zoomControls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 24,
-    paddingVertical: 16,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-  },
-  zoomButton: {
-    padding: 8,
-  },
-  zoomSliderWrapper: {
-    flex: 1,
-    marginHorizontal: 16,
-  },
-  zoomSlider: {
-    width: '100%',
-  },
-  zoomLabel: {
-    marginTop: 4,
-    textAlign: 'center',
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '600',
   },
   bottomBar: {
     flexDirection: 'row',
