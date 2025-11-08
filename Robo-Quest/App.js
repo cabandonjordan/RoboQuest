@@ -12,6 +12,8 @@ import JournalScreen from './JournalScreen';
 import BattleScreen from './BattleScreen';
 import CameraScreen from './CameraScreen';
 import LoadoutScreen from './LoadoutScreen';
+import ResultScreen from './ResultScreen';
+import AnalyzeScreen from './AnalyzeScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -34,6 +36,8 @@ function App() {
         <Stack.Screen name="Battle" component={BattleScreen} />
         <Stack.Screen name="Camera" component={CameraScreen} />
         <Stack.Screen name="Loadout" component={LoadoutScreen} />
+        <Stack.Screen name="Result" component={ResultScreen} />
+        <Stack.Screen name="Analyze" component={AnalyzeScreen} options={{ headerShown: false }} />
         
       </Stack.Navigator>
     </NavigationContainer>
