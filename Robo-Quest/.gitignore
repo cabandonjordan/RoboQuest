@@ -39,3 +39,8 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# 🛠️ Development Files - DO NOT COMMIT
+DevScreen.js
+*.dev.js
+*.test.local.js

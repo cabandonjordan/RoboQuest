@@ -17,10 +17,27 @@ import LoadoutScreen from './LoadoutScreen';
 import ResultScreen from './ResultScreen';
 import AnalyzeScreen from './AnalyzeScreen';
 
+// 🛠️ DEV MODE TOGGLE - Set to false for production
+const DEV_MODE = false; // Change to true to enable dev screen selector
+// Only import DevScreen if file exists (won't crash in production)
+let DevScreen;
+if (DEV_MODE) {
+  try {
+    DevScreen = require('./DevScreen').default;
+  } catch (e) {
+    console.log('DevScreen not found - continuing normally');
+  }
+}
+
 const Stack = createNativeStackNavigator();
 
 function App() {
   const [isLoading, setIsLoading] = useState(true);
+
+  // 🛠️ If in dev mode and DevScreen exists, show it
+  if (DEV_MODE && DevScreen) {
+    return <DevScreen />;
+  }
 
   // Show loading screen while assets are loading
   if (isLoading) {

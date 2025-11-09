@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, Image, StyleSheet, Animated, Dimensions } from 'react-native';
 import { Asset } from 'expo-asset';
 
@@ -6,8 +6,10 @@ const { width, height } = Dimensions.get('window');
 
 export default function LoadingScreen({ onFinish }) {
   const [loadingProgress, setLoadingProgress] = useState(0);
-  const progressAnim = new Animated.Value(0);
-  const robotAnim = new Animated.Value(0);
+  
+  // Use useRef to store Animated values so they persist across renders
+  const progressAnim = useRef(new Animated.Value(0)).current;
+  const robotAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     // Animate robot floating
@@ -50,23 +52,29 @@ export default function LoadingScreen({ onFinish }) {
         require('./assets/battle/enemy.png'),
         require('./assets/battle/player.png'),
       ];
-
+      
       const totalAssets = imageAssets.length;
       let loadedAssets = 0;
 
       // Cache images one by one to track progress
       for (const image of imageAssets) {
         await Asset.fromModule(image).downloadAsync();
+        
         loadedAssets++;
         const progress = (loadedAssets / totalAssets) * 100;
+        
+        // Update percentage and animation together
         setLoadingProgress(Math.round(progress));
-
-        // Animate progress bar
+        
+        // Animate progress bar with faster, smoother animation
         Animated.timing(progressAnim, {
           toValue: progress,
-          duration: 300,
+          duration: 150, // Much faster to stay in sync with percentage
           useNativeDriver: false,
         }).start();
+        
+        // Shorter delay so animation completes before next update
+        await new Promise(resolve => setTimeout(resolve, 150));
       }
 
       // Optional: Add a small delay before transitioning
@@ -94,7 +102,7 @@ export default function LoadingScreen({ onFinish }) {
     <View style={styles.container}>
       {/* Background */}
       <Image 
-        source={require('./assets/loadingscreen/New_Clouds.png')} 
+        source={require('./assets/loadingscreen/New_Clouds.png')}
         style={styles.background}
         resizeMode="cover"
       />
@@ -102,7 +110,7 @@ export default function LoadingScreen({ onFinish }) {
       <View style={styles.content}>
         {/* Logo */}
         <Image 
-          source={require('./assets/loadingscreen/ROBOQUEST.png')} 
+          source={require('./assets/loadingscreen/ROBOQUEST.png')}
           style={styles.logo}
           resizeMode="contain"
         />
@@ -117,7 +125,7 @@ export default function LoadingScreen({ onFinish }) {
           ]}
         >
           <Image 
-            source={require('./assets/loadingscreen/SplashRobot.png')} 
+            source={require('./assets/loadingscreen/SplashRobot.png')}
             style={styles.robot}
             resizeMode="contain"
           />
@@ -128,14 +136,14 @@ export default function LoadingScreen({ onFinish }) {
         
         {/* Progress Bar */}
         <View style={styles.progressBarContainer}>
-          <View style={styles.progressBarBackground}>
-            <Animated.View 
-              style={[
-                styles.progressBarFill,
-                { width: progressWidth },
-              ]}
-            />
-          </View>
+          <Animated.View 
+            style={[
+              styles.progressBarFill,
+              {
+                width: progressWidth,
+              }
+            ]}
+          />
         </View>
         
         {/* Percentage */}
@@ -184,22 +192,20 @@ const styles = StyleSheet.create({
     textShadowRadius: 6,
   },
   progressBarContainer: {
-    width: width * 0.7,
-    marginBottom: 15,
-  },
-  progressBarBackground: {
-    width: '100%',
+    width: '70%',
+    maxWidth: 350,
     height: 26,
-    backgroundColor: '#000000',
+    backgroundColor: '#FFFFFF',
     borderRadius: 13,
     overflow: 'hidden',
-    borderWidth: 3,
-    borderColor: '#FFFFFF',
+    marginBottom: 15,
+    borderWidth: 2,
+    borderColor: '#000000',
   },
   progressBarFill: {
     height: '100%',
     backgroundColor: '#FFAE00',
-    borderRadius: 10,
+    borderRadius: 13,
   },
   percentageText: {
     fontSize: 24,

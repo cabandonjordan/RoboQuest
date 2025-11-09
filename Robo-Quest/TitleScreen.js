@@ -1,10 +1,12 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { 
   View, 
   Text, 
   TouchableOpacity, 
   StyleSheet, 
-  SafeAreaView, 
+  Image,
+  Dimensions,
+  Animated,
   Modal, 
   TextInput,
   KeyboardAvoidingView,
@@ -12,66 +14,113 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 
+const { width, height } = Dimensions.get('window');
+
 const TitleScreen = () => {
   const navigation = useNavigation();
-  const [isStarting, setIsStarting] = React.useState(false);
   const [showLogin, setShowLogin] = React.useState(false);
   const [email, setEmail] = React.useState('');
   const [password, setPassword] = React.useState('');
   const [rememberMe, setRememberMe] = React.useState(false);
+  
+  // Robot floating animation
+  const robotAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    // Animate robot floating
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(robotAnim, {
+          toValue: -15,
+          duration: 2000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(robotAnim, {
+          toValue: 0,
+          duration: 2000,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  }, []);
 
   const handleStartGame = () => {
-    setIsStarting(true);
-    setTimeout(() => {
-      setIsStarting(false);
-      setShowLogin(true);
-    }, 300);
+    setShowLogin(true);
+  };
+
+  const handleProfilePress = () => {
+    setShowLogin(true);
   };
 
   const handleLogin = () => {
     console.log('Login credentials submitted.');
+    console.log('Email:', email);
+    console.log('Remember Me:', rememberMe);
+    
+    // Close modal
     setShowLogin(false);
-    // Navigate to main menu after login
+    
+    // Clear form
+    setEmail('');
+    setPassword('');
+    
+    // Navigate to Main Menu
     navigation.navigate('Home');
   };
 
-  const glitchStyle = {
-    fontFamily: 'DigitalGlitchDemo',
-    fontWeight: '900',
-    letterSpacing: 2,
-    textShadowColor: '#000000',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 0,
-  };
-
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
+      {/* Background */}
+      <Image 
+        source={require('./assets/titlescreen/New_Clouds.png')}
+        style={styles.background}
+        resizeMode="cover"
+      />
+
+      {/* Profile Icon - Top Right */}
+      <TouchableOpacity 
+        style={styles.profileButton}
+        onPress={handleProfilePress}
+      >
+        <Image 
+          source={require('./assets/titlescreen/profile.png')}
+          style={styles.profileIcon}
+          resizeMode="contain"
+        />
+      </TouchableOpacity>
+
       <View style={styles.content}>
-        {/* Title Section */}
-        <View style={styles.titleSection}>
-          <Text style={[styles.title, glitchStyle]}>ROBOQUEST</Text>
-          <Text style={[styles.subtitle, glitchStyle]}>PHOTO OPS</Text>
-        </View>
+        {/* Logo */}
+        <Image 
+          source={require('./assets/titlescreen/ROBOQUEST.png')}
+          style={styles.logo}
+          resizeMode="contain"
+        />
 
-        {/* Robot Figure Placeholder Area */}
+        {/* Robot */}
         <View style={styles.robotContainer}>
-          <View style={styles.robotPlaceholder}>
-            <Text style={styles.robotText}>Robot Figure Placeholder</Text>
-          </View>
+          <Animated.View
+            style={[
+              styles.robotAnimated,
+              {
+                transform: [{ translateY: robotAnim }],
+              },
+            ]}
+          >
+            <Image 
+              source={require('./assets/titlescreen/titlescreen_Robot.png')}
+              style={styles.robot}
+              resizeMode="contain"
+            />
+          </Animated.View>
         </View>
 
-        {/* Start Game Button */}
+        {/* Tap to Play Button */}
         <TouchableOpacity
-          style={[
-            styles.startButton,
-            isStarting && styles.startButtonPressed
-          ]}
+          style={styles.playButton}
           onPress={handleStartGame}
-          disabled={isStarting || showLogin}
         >
-          <Text style={styles.startButtonText}>
-            {isStarting ? '...' : 'Start Game'}
-          </Text>
+          <Text style={styles.playButtonText}>TAP TO PLAY</Text>
         </TouchableOpacity>
       </View>
 
@@ -168,91 +217,85 @@ const TitleScreen = () => {
           </KeyboardAvoidingView>
         </TouchableOpacity>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f3f4f6',
+    backgroundColor: '#87CEEB',
+  },
+  background: {
+    position: 'absolute',
+    width: width,
+    height: height,
+  },
+  profileButton: {
+    position: 'absolute',
+    top: 40,
+    right: 20,
+    zIndex: 10,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#FFAE00',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  profileIcon: {
+    width: 30,
+    height: 30,
   },
   content: {
     flex: 1,
-    justifyContent: 'flex-start',
+    justifyContent: 'center',
     alignItems: 'center',
-    padding: 32,
-    paddingTop: 20,
+    paddingHorizontal: 20,
   },
-  titleSection: {
-    alignItems: 'center',
-    marginTop: 10,
+  logo: {
+    width: width * 0.8,
+    height: 100,
+    marginTop: -50,
     marginBottom: 20,
-    width: '100%',
-    backgroundColor: 'transparent',
-  },
-  title: {
-    fontSize: 48,
-    color: '#000000',
-    fontWeight: '900',
-    textAlign: 'center',
-    includeFontPadding: false,
-  },
-  subtitle: {
-    fontSize: 36,
-    color: '#000000',
-    marginTop: 8,
-    fontWeight: '900',
-    textAlign: 'center',
-    includeFontPadding: false,
   },
   robotContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    maxHeight: 400,
+  },
+  robotAnimated: {
+    width: width * 0.7,
+    height: 350,
+  },
+  robot: {
     width: '100%',
-    minHeight: 250,
+    height: '100%',
   },
-  robotPlaceholder: {
-    width: 250,
-    height: 250,
-    borderRadius: 125,
-    backgroundColor: '#f3f4f6',
-    borderWidth: 4,
-    borderColor: '#d1d5db',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 48,
-  },
-  robotText: {
-    fontSize: 18,
-    color: '#6b7280',
-    fontWeight: 'bold',
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  startButton: {
-    width: '80%',
+  playButton: {
+    width: width * 0.6,
     paddingVertical: 16,
-    backgroundColor: '#4b5563',
-    borderRadius: 8,
+    backgroundColor: '#7BA8C0',
+    borderRadius: 25,
+    marginBottom: 60,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 8,
-    marginBottom: 32,
   },
-  startButtonPressed: {
-    backgroundColor: '#1f2937',
-    shadowOpacity: 0,
-    transform: [{ scale: 0.95 }],
-  },
-  startButtonText: {
-    color: '#fff',
+  playButtonText: {
+    color: '#000000',
     fontSize: 20,
-    fontWeight: '600',
+    fontWeight: 'bold',
     textAlign: 'center',
+    letterSpacing: 2,
   },
   modalBackdrop: {
     flex: 1,
