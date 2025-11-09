@@ -13,6 +13,7 @@ import {
   Platform
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { auth, signInWithEmailAndPassword, GoogleAuthProvider, signInWithCredential, fetchSignInMethodsForEmail } from './database/firebase';
 
 const { width, height } = Dimensions.get('window');
 
@@ -52,20 +53,19 @@ const TitleScreen = () => {
     setShowLogin(true);
   };
 
-  const handleLogin = () => {
-    console.log('Login credentials submitted.');
-    console.log('Email:', email);
-    console.log('Remember Me:', rememberMe);
-    
-    // Close modal
-    setShowLogin(false);
-    
-    // Clear form
-    setEmail('');
-    setPassword('');
-    
-    // Navigate to Main Menu
-    navigation.navigate('Home');
+  const handleLogin = async () => {
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+      navigation.navigate('Home'); // use React Navigation
+    } catch (error) {
+      if (error.code === 'auth/wrong-password') {
+        alert('Incorrect email or password. Please try again.');
+      } else if (error.code === 'auth/user-not-found') {
+        alert('No account found with this email.');
+      } else {
+        alert('Login Failed: ' + error.message);
+      }
+    }
   };
 
   return (
@@ -195,6 +195,16 @@ const TitleScreen = () => {
                     onPress={handleLogin}
                   >
                     <Text style={styles.continueButtonText}>Continue</Text>
+                  </TouchableOpacity>
+                  {/* Sign Up Button Below Form */}
+                  <TouchableOpacity
+                    style={styles.modalSignUpButton}
+                    onPress={() => {
+                      setShowLogin(false);
+                      navigation.navigate('Signup');
+                    }}
+                  >
+                    <Text style={styles.modalSignUpButtonText}>Sign Up</Text>
                   </TouchableOpacity>
                 </View>
 
@@ -385,6 +395,19 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     maxWidth: 150,
     marginLeft: 8,
+  },
+   modalSignUpButton: {
+    marginTop: 12,
+    width: '100%',
+    paddingVertical: 12,
+    backgroundColor: '#4b5563',
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  modalSignUpButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
   continueButton: {
     width: '100%',

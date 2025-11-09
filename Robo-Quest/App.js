@@ -7,6 +7,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 // Import all screen components
 import LoadingScreen from './LoadingScreen';
 import TitleScreen from './LoginScreen';
+import SignupScreen from './SignupScreen';
 import MainMenuScreen from './MainMenuScreen';
 import SettingsScreen from './SettingsScreen'; 
 import CollectionScreen from './CollectionScreen';
@@ -52,6 +53,13 @@ function App() {
         <Stack.Screen 
           name="LoginScreen" 
           component={TitleScreen} 
+          options={{ headerShown: false }} 
+        />
+
+        {/* Signup Screen Modal */}
+        <Stack.Screen 
+          name="Signup" 
+          component={SignupScreen} 
           options={{ headerShown: false }} 
         />
         
