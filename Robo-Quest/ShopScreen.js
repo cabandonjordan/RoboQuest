@@ -2,12 +2,12 @@ import React from 'react';
 import { View, Text, StyleSheet, Button } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 
-function CollectionScreen() {
+function ShopScreen() {
   const navigation = useNavigation();
 
   return (
     <View style={styles.container}>
-      <Text style={styles.text}>Welcome to the Collection Screen!</Text>
+      <Text style={styles.text}>Welcome to the Shop Screen!</Text>
     </View>
   );
 }
@@ -26,4 +26,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default CollectionScreen;
+export default ShopScreen;

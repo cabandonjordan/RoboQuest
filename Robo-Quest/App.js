@@ -15,7 +15,7 @@ import CameraScreen from './CameraScreen';
 import LoadoutScreen from './LoadoutScreen';
 import ResultScreen from './ResultScreen';
 import AnalyzeScreen from './AnalyzeScreen';
-
+import ShopScreen from './ShopScreen';
 const Stack = createNativeStackNavigator();
 
 function App() {
@@ -40,7 +40,7 @@ function App() {
         <Stack.Screen name="Result" component={ResultScreen} />
         <Stack.Screen name="Analyze" component={AnalyzeScreen} options={{ headerShown: false }} />
         <Stack.Screen name="TitleScreen" component={TitleScreen} options={{ headerShown: false }} />
-        
+        <Stack.Screen name="Shop" component={ShopScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );

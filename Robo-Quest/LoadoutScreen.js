@@ -1,11 +1,22 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, Modal, Pressable } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, Modal, Pressable, Image } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+
+// --- GUNMETAL GREY COLOR PALETTE ---
+const ACCENT_GREY = '#5B676D'; // Medium Gunmetal Grey for buttons
+const LIGHT_GREY = '#AAA9AD';  // Lightest Gunmetal Grey for light backgrounds/borders (No longer used in header)
+const DARK_GREY_TEXT = '#1F262A'; // Darkest Gunmetal Grey for text
+const ICON_TINT_GREY = '#848689'; // Medium-light Grey for inactive/robot icon tint
+
+// --- ASSET ICONS (Only keeping settings) ---
+const ICONS = {
+    settings: require('./assets/icons/settings.png'),
+};
 
 const DROPDOWN_OPTIONS = {
-
     TierBox: ['Common', 'Rare', 'Legendary'], 
-    PartBox: ['Wheels', 'Engines', 'Chasis', 'Weapon'],
-    TypeBox: ['General', 'Creative', 'Engineer'],
+    PartBox: ['Wheels', 'Engines', 'Chassis', 'Weapon'],
+    TypeBox: ['Innovare', 'General', 'Creative', 'Engineer'],
 };
 
 const DropdownModal = ({ isVisible, onClose, options, onSelect, positionStyle }) => {
@@ -33,21 +44,25 @@ const DropdownModal = ({ isVisible, onClose, options, onSelect, positionStyle })
     );
 };
 
-const FilterBox = ({ label, value, onPress }) => (
+// Updated FilterBox to use tag-like styling
+const FilterBox = ({ value, onPress }) => (
     <TouchableOpacity style={styles.filterBox} onPress={onPress}>
-        <Text style={styles.filterText}>{label}: {value}</Text>
+        <Text style={styles.filterText}>{value}</Text>
     </TouchableOpacity>
 );
 
+// PartAppearanceItem reverted to use a generic icon (⚙️) and label
 const PartAppearanceItem = ({ label }) => (
     <View style={styles.partItem}>
-        <Text style={styles.partIcon}>🤖</Text>
+        <Text style={styles.partIcon}>⚙️</Text>
         <Text style={styles.partLabel}>{label}</Text>
     </View>
 );
 
 
-function LoadoutScreen({ navigation }) {
+function LoadoutScreen() {
+    const navigation = useNavigation();
+    
     const [selectedType, setSelectedType] = useState('Innovare');
     const [selectedTier, setSelectedTier] = useState('Rare');
     const [selectedPart, setSelectedPart] = useState('Weapon');
@@ -56,9 +71,9 @@ function LoadoutScreen({ navigation }) {
 
     const PartLists = {
         Weapon: ['IX23', 'IX24', 'IX28'],
-        Chasis: ['GC12'],
+        Chassis: ['GC12'],
         Wheels: ['CW10', 'IW10'],
-        Engines: ['EN01', 'EN02'],
+        Engines: ['IE10', 'GE10', 'CE10'],
     };
 
     const handleSelect = (key, value) => {
@@ -69,46 +84,56 @@ function LoadoutScreen({ navigation }) {
     };
 
     const Presetlbl = "Preset 1";
-    const RobotAppearance = <Text style={styles.robotPlaceholder}>[Robot Appearance Placeholder]</Text>;
 
     return (
         <SafeAreaView style={styles.safeArea}>
             
+            {/* Header: Settings Icon Only */}
             <View style={styles.header}>
                 <TouchableOpacity onPress={() => navigation.navigate('Settings')}>
-                    <Text style={styles.headerIcon}>⚙️</Text>
+                    <Image 
+                        source={ICONS.settings} 
+                        style={styles.settingsIcon} 
+                        resizeMode="contain"
+                    />
                 </TouchableOpacity>
             </View>
 
+            {/* Robot Display Area */}
             <View style={styles.robotDisplayArea}>
-                {RobotAppearance}
+                <Text style={styles.robotPlaceholder}>[Robot Icon Placeholder]</Text>
+                
                 <View style={styles.presetControls}>
-                    <Text style={styles.arrowIcon}>{'<'}</Text> 
-                    <Text style={styles.presetLabel}>{Presetlbl}</Text> 
-                    <Text style={styles.arrowIcon}>{'>'}</Text> 
+                    <TouchableOpacity>
+                        <Text style={styles.arrowIcon}>{'<'}</Text>
+                    </TouchableOpacity>
+                    <View style={styles.presetLabelContainer}>
+                        <Text style={styles.presetLabel}>{Presetlbl}</Text>
+                    </View>
+                    <TouchableOpacity>
+                        <Text style={styles.arrowIcon}>{'>'}</Text>
+                    </TouchableOpacity>
                 </View>
             </View>
             
+            {/* Filter Row */}
             <View style={styles.filterRow}>
                 <FilterBox 
-                    label="Type" 
-                    value={selectedType} 
+                    value={`Type: ${selectedType}`} 
                     onPress={() => setActiveDropdown('TypeBox')} 
                 />
                 <FilterBox 
-                    label="Tier" 
-                    value={selectedTier} 
+                    value={`Tier: ${selectedTier}`} 
                     onPress={() => setActiveDropdown('TierBox')} 
                 />
                 <FilterBox 
-                    label="Part" 
-                    value={selectedPart} 
+                    value={`Part: ${selectedPart}`} 
                     onPress={() => setActiveDropdown('PartBox')} 
                 />
             </View>
 
+            {/* Parts List Area */}
             <View style={styles.partsArea}>
-                <Text style={styles.sectionTitle}>Parts: {selectedPart}</Text>
                 <View style={styles.partRow}>
                     {(PartLists[selectedPart] || []).map(name => 
                         <PartAppearanceItem key={name} label={name} />
@@ -116,6 +141,7 @@ function LoadoutScreen({ navigation }) {
                 </View>
             </View>
 
+            {/* Dropdown Modals (Positioning adjusted to align under filter boxes) */}
             
             {activeDropdown === 'TypeBox' && (
                 <DropdownModal
@@ -123,7 +149,7 @@ function LoadoutScreen({ navigation }) {
                     onClose={() => setActiveDropdown(null)}
                     options={DROPDOWN_OPTIONS.TypeBox}
                     onSelect={(value) => handleSelect('TypeBox', value)}
-                    positionStyle={{top: 150, left: 50}} // Adjust position manually
+                    positionStyle={{top: 155, left: 30}}
                 />
             )}
             
@@ -133,18 +159,17 @@ function LoadoutScreen({ navigation }) {
                     onClose={() => setActiveDropdown(null)}
                     options={DROPDOWN_OPTIONS.TierBox}
                     onSelect={(value) => handleSelect('TierBox', value)}
-                    positionStyle={{top: 150, alignSelf: 'center'}} 
+                    positionStyle={{top: 155, left: '35%'}}
                 />
             )}
             
-        
             {activeDropdown === 'PartBox' && (
                 <DropdownModal
                     isVisible={true}
                     onClose={() => setActiveDropdown(null)}
                     options={DROPDOWN_OPTIONS.PartBox}
                     onSelect={(value) => handleSelect('PartBox', value)}
-                    positionStyle={{top: 150, right: 50}} 
+                    positionStyle={{top: 155, right: 30}}
                 />
             )}
 
@@ -157,6 +182,7 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: '#fff',
     },
+    // --- HEADER ---
     header: {
         flexDirection: 'row',
         justifyContent: 'flex-end', 
@@ -164,95 +190,109 @@ const styles = StyleSheet.create({
         paddingHorizontal: 20,
         paddingTop: 10,
         height: 60,
+        // REMOVED gray background and border
+        // backgroundColor: LIGHT_GREY,
+        // borderBottomWidth: 1,
+        // borderBottomColor: ACCENT_GREY,
     },
-    headerIcon: {
-        fontSize: 30, 
-        color: 'gray',
+    settingsIcon: {
+        width: 30,
+        height: 30,
+        tintColor: ACCENT_GREY,
     },
+    // --- ROBOT DISPLAY ---
     robotDisplayArea: {
         alignItems: 'center',
         paddingVertical: 30,
-        borderBottomWidth: 1,
-        borderBottomColor: '#eee',
+        flex: 0.5,
+        justifyContent: 'space-around',
     },
     robotPlaceholder: {
         fontSize: 18,
-        color: '#888',
+        color: ICON_TINT_GREY,
         marginBottom: 20,
     },
     presetControls: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 20,
+        gap: 15,
+        marginTop: 10,
     },
     arrowIcon: {
         fontSize: 24,
-        color: 'gray',
+        color: ACCENT_GREY,
+    },
+    presetLabelContainer: {
+        backgroundColor: ACCENT_GREY,
+        borderRadius: 5,
+        paddingHorizontal: 20,
+        paddingVertical: 8,
     },
     presetLabel: {
         fontSize: 18,
         fontWeight: 'bold',
-        paddingHorizontal: 20,
-        paddingVertical: 5,
-        backgroundColor: '#ccc',
-        borderRadius: 5,
+        color: 'white',
     },
+    // --- FILTER ROW (TAGS) ---
     filterRow: {
         flexDirection: 'row',
         justifyContent: 'space-around',
         paddingVertical: 15,
-        backgroundColor: '#f9f9f9',
+        backgroundColor: LIGHT_GREY,
         borderBottomWidth: 1,
-        borderBottomColor: '#eee',
+        borderBottomColor: ICON_TINT_GREY,
     },
     filterBox: {
         paddingHorizontal: 15,
         paddingVertical: 5,
         borderRadius: 15,
-        backgroundColor: '#ddd',
+        backgroundColor: ACCENT_GREY,
     },
     filterText: {
-        fontSize: 12,
-        fontWeight: '600',
-        color: '#333',
-    },
-    partsArea: {
-        padding: 15,
-    },
-    sectionTitle: {
         fontSize: 14,
-        fontWeight: 'bold',
-        marginTop: 15,
-        marginBottom: 5,
-        paddingHorizontal: 10,
+        fontWeight: '600',
+        color: 'white',
+    },
+    // --- PARTS AREA ---
+    partsArea: {
+        flex: 1,
+        padding: 20,
     },
     partRow: {
         flexDirection: 'row',
-        gap: 15,
+        flexWrap: 'wrap',
+        gap: 20,
         paddingVertical: 10,
+        borderBottomWidth: 1,
+        borderBottomColor: ICON_TINT_GREY,
     },
     partItem: {
         alignItems: 'center',
+        marginRight: 10,
     },
+    // Reverted to text icon styling
     partIcon: {
-        fontSize: 40, 
-        color: 'gray',
+        fontSize: 40,
+        color: ICON_TINT_GREY,
+        marginBottom: 5,
     },
     partLabel: {
-        fontSize: 12,
+        fontSize: 14,
+        fontWeight: '500',
+        color: DARK_GREY_TEXT,
+        marginTop: 5,
     },
+    // --- DROPDOWN MODAL ---
     modalOverlay: {
         flex: 1,
         backgroundColor: 'rgba(0, 0, 0, 0.3)', 
-        justifyContent: 'flex-start', 
-        alignItems: 'flex-start', 
     },
     dropdownContainer: {
         position: 'absolute',
         width: 150, 
         backgroundColor: 'white',
         borderRadius: 8,
-        shadowColor: '#000',
+        shadowColor: DARK_GREY_TEXT,
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.2,
         shadowRadius: 3,
@@ -262,11 +302,11 @@ const styles = StyleSheet.create({
         paddingVertical: 10,
         paddingHorizontal: 15,
         borderBottomWidth: 1,
-        borderBottomColor: '#eee',
+        borderBottomColor: LIGHT_GREY,
     },
     dropdownText: {
         fontSize: 14,
-        color: '#333',
+        color: DARK_GREY_TEXT,
     },
 });
 
