@@ -6,8 +6,8 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 
 // Import all screen components
 import LoadingScreen from './LoadingScreen';
-import TitleScreen from './TitleScreen';
-import MainMenuScreen from './MainMenuScreen'; // The screen with all the buttons
+import TitleScreen from './LoginScreen';
+import MainMenuScreen from './MainMenuScreen';
 import SettingsScreen from './SettingsScreen'; 
 import CollectionScreen from './CollectionScreen';
 import JournalScreen from './JournalScreen';
@@ -29,11 +29,11 @@ function App() {
 
   return (
     <NavigationContainer>
-      <Stack.Navigator initialRouteName="TitleScreen">
+      <Stack.Navigator initialRouteName="LoginScreen">
         
         {/* Title Screen - First screen after loading */}
         <Stack.Screen 
-          name="TitleScreen" 
+          name="LoginScreen" 
           component={TitleScreen} 
           options={{ headerShown: false }} 
         />
