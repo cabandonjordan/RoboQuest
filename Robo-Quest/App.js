@@ -1,10 +1,11 @@
 // App.js
-import React from 'react';
+import React, { useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 
 // Import all screen components
+import LoadingScreen from './LoadingScreen';
 import TitleScreen from './TitleScreen';
 import MainMenuScreen from './MainMenuScreen'; // The screen with all the buttons
 import SettingsScreen from './SettingsScreen'; 
@@ -19,9 +20,23 @@ import ShopScreen from './ShopScreen';
 const Stack = createNativeStackNavigator();
 
 function App() {
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Show loading screen while assets are loading
+  if (isLoading) {
+    return <LoadingScreen onFinish={() => setIsLoading(false)} />;
+  }
+
   return (
     <NavigationContainer>
-      <Stack.Navigator initialRouteName="Home">
+      <Stack.Navigator initialRouteName="TitleScreen">
+        
+        {/* Title Screen - First screen after loading */}
+        <Stack.Screen 
+          name="TitleScreen" 
+          component={TitleScreen} 
+          options={{ headerShown: false }} 
+        />
         
         {/* The main screen showing all the custom buttons. No header is needed here. */}
         <Stack.Screen 
