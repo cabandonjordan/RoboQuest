@@ -1,22 +1,18 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { View, TouchableOpacity, StyleSheet, SafeAreaView, Image, Text, Animated, Dimensions, ImageBackground } from 'react-native'; 
 import { useNavigation } from '@react-navigation/native';
-
-// Define Constants
 const DARK_ACCENT_GREY = '#333333'; 
-const LIGHT_GREY = '#AAA9AD';  
-const ACCENT_GREY = '#5B676D'; // For QuestList divider color
-const PANEL_DARK_BG = '#2A3439'; // For QuestList background
+const LIGHT_GREY = '#AAA9AD';  
+const ACCENT_GREY = '#5B676D'; 
+const PANEL_DARK_BG = '#2A3439';
 const CIRCLE_BG_COLOR = 'rgba(255, 255, 255, 0.2)'; 
 const ICON_SIZE = 30; 
 const CONTAINER_SIZE = 45; 
 const screenWidth = Dimensions.get('window').width;
 
-// Quest List constants
 const QUEST_LIST_WIDTH = screenWidth * 0.90; 
 const QUEST_LIST_OFFSET = (screenWidth / 2) - (QUEST_LIST_WIDTH / 2); 
 
-// Define ICONS object
 const ICONS = {
     settings: require('./assets/icons/settings.png'),
     shop: require('./assets/icons/shop.png'),
@@ -24,7 +20,6 @@ const ICONS = {
     main_menubg: require('./assets/background/MainMenubg.png'), 
 };
 
-// Define Base Style OUTSIDE of StyleSheet.create
 const baseIconStyle = {
     width: CONTAINER_SIZE,
     height: CONTAINER_SIZE,
@@ -34,37 +29,34 @@ const baseIconStyle = {
     alignItems: 'center',
 };
 
-// --- QuestList Component ---
 const QuestList = ({ show, slideAnim, questIconLayout }) => {
-    if (!show || !questIconLayout) return null; 
+    if (!show || !questIconLayout) return null; 
 
-    const topPosition = questIconLayout.y + questIconLayout.height + 5; 
-    
-    const animatedStyle = {
-        transform: [{
-            translateX: slideAnim.interpolate({
-                inputRange: [0, 1],
-                outputRange: [-QUEST_LIST_WIDTH, QUEST_LIST_OFFSET - 20], 
-            }),
-        }],
-        top: topPosition,
-        left: 0, 
-    };
+    const topPosition = questIconLayout.y + questIconLayout.height + 5; 
+    
+    const animatedStyle = {
+        transform: [{
+            translateX: slideAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [-QUEST_LIST_WIDTH, QUEST_LIST_OFFSET - 20], 
+            }),
+        }],
+        top: topPosition,
+        left: 0, 
+    };
 
-    const QUESTS = ["• Collect 5 Energy Cells", "• Defeat Boss Unit 3", "• Visit the Workshop"];
+    const QUESTS = ["• Collect 5 Energy Cells", "• Defeat Boss Unit 3", "• Visit the Workshop"];
 
-    return (
-        <Animated.View style={[questListStyles.container, animatedStyle, { width: QUEST_LIST_WIDTH }]}>
-            {QUESTS.map((quest, index) => (
-                <View key={index} style={questListStyles.item}>
-                    {/* TEXT WRAPPING IS CORRECT HERE */}
-                    <Text style={questListStyles.text}>{quest}</Text> 
-                </View>
-            ))}
-        </Animated.View>
-    );
+    return (
+        <Animated.View style={[questListStyles.container, animatedStyle, { width: QUEST_LIST_WIDTH }]}>
+            {QUESTS.map((quest, index) => (
+                <View key={index} style={questListStyles.item}>
+                    <Text style={questListStyles.text}>{quest}</Text> 
+                </View>
+            ))}
+        </Animated.View>
+    );
 };
-// -----------------------------
 
 
 function MainMenuScreen() {
@@ -104,7 +96,6 @@ function MainMenuScreen() {
     return (
         <SafeAreaView style={styles.safeArea}>
             
-            {/* QuestList must be rendered BEFORE ImageBackground if it is to overlay it */}
             <QuestList 
                 show={showQuestList} 
                 slideAnim={slideAnim} 
@@ -116,10 +107,8 @@ function MainMenuScreen() {
                 style={styles.background}
                 resizeMode="cover"
             >
-                {/* Floating Icons Layer */}
                 <View style={styles.floatingIconsLayer}>
                     
-                    {/* Top Left Icon (Quest) */}
                     <TouchableOpacity 
                         style={baseIconStyle} 
                         onPress={toggleQuestList} 
@@ -134,7 +123,6 @@ function MainMenuScreen() {
                         />
                     </TouchableOpacity>
 
-                    {/* Top Right Icons (Shop and Settings) */}
                     <View style={styles.topRightIcons}>
                         <TouchableOpacity 
                             style={baseIconStyle} 
@@ -164,34 +152,32 @@ function MainMenuScreen() {
     );
 }
 
-// --- Quest List Styles ---
 const questListStyles = StyleSheet.create({
-    container: {
-        position: 'absolute',
-        backgroundColor: PANEL_DARK_BG,
-        borderRadius: 8,
-        padding: 10,
-        zIndex: 50, 
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.5,
-        shadowRadius: 5,
-        elevation: 10,
-    },
-    item: {
-        paddingVertical: 8,
-        paddingHorizontal: 5,
-        borderBottomWidth: 1,
-        borderBottomColor: ACCENT_GREY,
-    },
-    text: {
-        color: LIGHT_GREY,
-        fontSize: 16,
-        fontWeight: '600',
-        textAlign: 'left',
-    },
+    container: {
+        position: 'absolute',
+        backgroundColor: PANEL_DARK_BG,
+        borderRadius: 8,
+        padding: 10,
+        zIndex: 50, 
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.5,
+        shadowRadius: 5,
+        elevation: 10,
+    },
+    item: {
+        paddingVertical: 8,
+        paddingHorizontal: 5,
+        borderBottomWidth: 1,
+        borderBottomColor: ACCENT_GREY,
+    },
+    text: {
+        color: LIGHT_GREY,
+        fontSize: 16,
+        fontWeight: '600',
+        textAlign: 'left',
+    },
 });
-// -----------------------------
 
 
 const styles = StyleSheet.create({
@@ -205,7 +191,6 @@ const styles = StyleSheet.create({
         height: '100%',
     },
     
-    // UI LAYOUT STYLES
     floatingIconsLayer: {
         flexDirection: 'row',
         justifyContent: 'space-between',
@@ -223,7 +208,6 @@ const styles = StyleSheet.create({
         gap: 15,
     },
     
-    // ICON STYLES
     floatingIcon: {
         width: ICON_SIZE, 
         height: ICON_SIZE,
