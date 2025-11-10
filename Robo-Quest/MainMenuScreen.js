@@ -1,286 +1,218 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { View, TouchableOpacity, StyleSheet, SafeAreaView, Image, Text, Animated, Dimensions, ImageBackground } from 'react-native'; 
 import { useNavigation } from '@react-navigation/native';
-
+const DARK_ACCENT_GREY = '#333333'; 
+const LIGHT_GREY = '#AAA9AD';  
 const ACCENT_GREY = '#5B676D'; 
-const LIGHT_GREY = '#AAA9AD';  
-const DARK_GREY_TEXT = '#1F262A'; 
-const ICON_TINT_GREY = '#848689'; 
-const PANEL_DARK_BG = '#2A3439'; 
+const PANEL_DARK_BG = '#2A3439';
+const CIRCLE_BG_COLOR = 'rgba(255, 255, 255, 0.2)'; 
+const ICON_SIZE = 30; 
+const CONTAINER_SIZE = 45; 
+const screenWidth = Dimensions.get('window').width;
+
+const QUEST_LIST_WIDTH = screenWidth * 0.90; 
+const QUEST_LIST_OFFSET = (screenWidth / 2) - (QUEST_LIST_WIDTH / 2); 
 
 const ICONS = {
-    settings: require('./assets/icons/settings.png'),
-    main_robot: require('./assets/icons/robot.png'),
-    quest: require('./assets/icons/quest.png'), 
-    shop: require('./assets/icons/shop.png'),
-    battle: require('./assets/icons/battle.png'),
-    loadout: require('./assets/icons/loadout.png'),
-    camera: require('./assets/icons/camera.png'),
-    collection: require('./assets/icons/collection.png'), 
-    journal: require('./assets/icons/journal.png'), 
+    settings: require('./assets/icons/settings.png'),
+    shop: require('./assets/icons/shop.png'),
+    quest: require('./assets/icons/quest.png'), 
+    main_menubg: require('./assets/background/MainMenubg.png'), 
 };
 
-const RobotDisplay = ({ navigation, presetLabel }) => (
-    <View style={styles.robotDisplayContainer}>
-        <Image
-            source={ICONS.main_robot}
-            style={styles.robotImage}
-            resizeMode="contain"
-        />
-        <View style={styles.presetControls}>
-            <TouchableOpacity>
-                <Text style={styles.arrowIcon}>{'<'}</Text>
-            </TouchableOpacity>
-            <View style={styles.presetLabelContainer}>
-                <Text style={styles.presetLabel}>{presetLabel}</Text>
-            </View>
-            <TouchableOpacity>
-                <Text style={styles.arrowIcon}>{'>'}</Text> 
-            </TouchableOpacity>
-        </View>
-    </View>
-);
+const baseIconStyle = {
+    width: CONTAINER_SIZE,
+    height: CONTAINER_SIZE,
+    borderRadius: CONTAINER_SIZE / 2,
+    backgroundColor: CIRCLE_BG_COLOR, 
+    justifyContent: 'center',
+    alignItems: 'center',
+};
 
-const screenWidth = Dimensions.get('window').width;
-const screenHeight = Dimensions.get('window').height; 
-const FLOATING_ICON_TOP_PADDING = 10; 
+const QuestList = ({ show, slideAnim, questIconLayout }) => {
+    if (!show || !questIconLayout) return null; 
+
+    const topPosition = questIconLayout.y + questIconLayout.height + 5; 
+    
+    const animatedStyle = {
+        transform: [{
+            translateX: slideAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [-QUEST_LIST_WIDTH, QUEST_LIST_OFFSET - 20], 
+            }),
+        }],
+        top: topPosition,
+        left: 0, 
+    };
+
+    const QUESTS = ["• Collect 5 Energy Cells", "• Defeat Boss Unit 3", "• Visit the Workshop"];
+
+    return (
+        <Animated.View style={[questListStyles.container, animatedStyle, { width: QUEST_LIST_WIDTH }]}>
+            {QUESTS.map((quest, index) => (
+                <View key={index} style={questListStyles.item}>
+                    <Text style={questListStyles.text}>{quest}</Text> 
+                </View>
+            ))}
+        </Animated.View>
+    );
+};
+
 
 function MainMenuScreen() {
-  const navigation = useNavigation();
+    const navigation = useNavigation();
+    const [showQuestList, setShowQuestList] = useState(false);
+    const slideAnim = useRef(new Animated.Value(0)).current; 
+    const questIconRef = useRef(null);
+    const [questIconLayout, setQuestIconLayout] = useState(null);
 
-  return (
-    <SafeAreaView style={styles.safeArea}>
-      
-      <View style={styles.floatingIconsLayer}>
-        <TouchableOpacity 
-          style={styles.questIconContainer}
-          onPress={() => {}} 
-          activeOpacity={1} 
-        >
-          <Image 
-              source={ICONS.quest} 
-              style={styles.floatingIcon} 
-              resizeMode="contain"
-          />
-        </TouchableOpacity>
+    const captureQuestIconLayout = () => {
+        questIconRef.current?.measure((fx, fy, width, height, px, py) => {
+            setQuestIconLayout({ x: px, y: py, width, height });
+        });
+    };
 
-        <View style={styles.topRightIcons}>
-            <TouchableOpacity 
-                style={styles.shopIconContainer} 
-                onPress={() => navigation.navigate('Shop')}
-            >
-                <Image 
-                    source={ICONS.shop} 
-                    style={styles.floatingIcon} 
-                    resizeMode="contain"
-                />
-            </TouchableOpacity>
-            <TouchableOpacity 
-                style={styles.settingsIconContainer} 
-                onPress={() => navigation.navigate('Settings')}
-            >
-                <Image 
-                    source={ICONS.settings} 
-                    style={styles.floatingIcon} 
-                    resizeMode="contain"
-                />
-            </TouchableOpacity>
-        </View>
-      </View>
-      
-      <View style={styles.contentContainer}> 
-        <RobotDisplay navigation={navigation} presetLabel="Preset 1" />
+    useEffect(() => {
+        const timeout = setTimeout(captureQuestIconLayout, 200);
+        return () => clearTimeout(timeout);
+    }, []);
 
-        <View style={styles.bottomPanel}>
-            <View style={styles.systemInfoRow}>
-                <Text style={styles.systemActiveText}>• SYSTEM ACTIVE</Text>
-            </View>
-            
-            <View style={styles.bottomButtonsGrid}>
-                
-                <View style={styles.buttonRow2}>
-                    <TouchableOpacity style={styles.buttonRow2Item} onPress={() => navigation.navigate('Battle')}>
-                        <Image source={ICONS.battle} style={styles.bottomButtonIcon} resizeMode="contain" />
-                        <Text style={styles.bottomButtonText}>BATTLE MODE</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.buttonRow2Item} onPress={() => navigation.navigate('Loadout')}>
-                        <Image source={ICONS.loadout} style={styles.bottomButtonIcon} resizeMode="contain" />
-                        <Text style={styles.bottomButtonText}>WORKSHOP LOADOUT</Text>
-                    </TouchableOpacity>
-                </View>
+    const toggleQuestList = () => {
+        if (!questIconLayout) {
+            captureQuestIconLayout();
+        }
+        
+        setShowQuestList(prev => {
+            const nextState = !prev;
+            Animated.timing(slideAnim, {
+                toValue: nextState ? 1 : 0,
+                duration: 300, 
+                useNativeDriver: true,
+            }).start();
+            return nextState;
+        });
+    };
 
-                <View style={styles.buttonRow3}>
-                    <TouchableOpacity style={styles.buttonRow3Item} onPress={() => navigation.navigate('Collection')}>
-                        <Image source={ICONS.collection} style={styles.bottomButtonIcon} resizeMode="contain" />
-                        <Text style={styles.bottomButtonText}>COLLECTION</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.buttonRow3Item} onPress={() => navigation.navigate('Camera')}>
-                        <Image source={ICONS.camera} style={styles.bottomButtonIcon} resizeMode="contain" />
-                        <Text style={styles.bottomButtonText}>CAMERA MODE</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.buttonRow3Item} onPress={() => navigation.navigate('Journal')}>
-                        <Image source={ICONS.journal} style={styles.bottomButtonIcon} resizeMode="contain" />
-                        <Text style={styles.bottomButtonText}>JOURNAL</Text>
-                    </TouchableOpacity>
-                </View>
+    return (
+        <SafeAreaView style={styles.safeArea}>
+            
+            <QuestList 
+                show={showQuestList} 
+                slideAnim={slideAnim} 
+                questIconLayout={questIconLayout}
+            />
 
-            </View>
+            <ImageBackground 
+                source={ICONS.main_menubg}
+                style={styles.background}
+                resizeMode="cover"
+            >
+                <View style={styles.floatingIconsLayer}>
+                    
+                    <TouchableOpacity 
+                        style={baseIconStyle} 
+                        onPress={toggleQuestList} 
+                        activeOpacity={0.7} 
+                        ref={questIconRef} 
+                        onLayout={captureQuestIconLayout} 
+                    >
+                        <Image 
+                            source={ICONS.quest} 
+                            style={[styles.floatingIcon, { tintColor: showQuestList ? '#00FFFF' : DARK_ACCENT_GREY }]} 
+                            resizeMode="contain"
+                        />
+                    </TouchableOpacity>
 
-            <Text style={styles.allSystemsText}>• ALL SYSTEMS OPERATIONAL</Text>
-        </View>
-      </View>
-
-    </SafeAreaView>
-  );
+                    <View style={styles.topRightIcons}>
+                        <TouchableOpacity 
+                            style={baseIconStyle} 
+                            onPress={() => navigation.navigate('Shop')}
+                        >
+                            <Image 
+                                source={ICONS.shop} 
+                                style={styles.floatingIcon} 
+                                resizeMode="contain"
+                            />
+                        </TouchableOpacity>
+                        <TouchableOpacity 
+                            style={baseIconStyle} 
+                            onPress={() => navigation.navigate('Settings')}
+                        >
+                            <Image 
+                                source={ICONS.settings} 
+                                style={styles.floatingIcon} 
+                                resizeMode="contain"
+                            />
+                        </TouchableOpacity>
+                    </View>
+                </View>
+                
+            </ImageBackground>
+        </SafeAreaView>
+    );
 }
 
+const questListStyles = StyleSheet.create({
+    container: {
+        position: 'absolute',
+        backgroundColor: PANEL_DARK_BG,
+        borderRadius: 8,
+        padding: 10,
+        zIndex: 50, 
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.5,
+        shadowRadius: 5,
+        elevation: 10,
+    },
+    item: {
+        paddingVertical: 8,
+        paddingHorizontal: 5,
+        borderBottomWidth: 1,
+        borderBottomColor: ACCENT_GREY,
+    },
+    text: {
+        color: LIGHT_GREY,
+        fontSize: 16,
+        fontWeight: '600',
+        textAlign: 'left',
+    },
+});
+
+
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: LIGHT_GREY,
-  },
-  contentContainer: {
-      flex: 1,
-      paddingTop: 60, 
-  },
-  floatingIconsLayer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: FLOATING_ICON_TOP_PADDING, 
-    height: 60,
-    position: 'absolute', 
-    width: '100%',
-    zIndex: 10,
-  },
-  floatingIcon: {
-    width: 50, 
-    height: 50,
-    tintColor: ACCENT_GREY, 
-  },
-  questIconContainer: {
-    padding: 5,
-    marginTop: 10, 
-  },
-  topRightIcons: {
-    flexDirection: 'row',
-    gap: 15,
-    marginTop: 10, 
-  },
-  shopIconContainer: { 
-    padding: 5,
-  },
-  settingsIconContainer: {
-    padding: 5,
-  },
-
-  
-  robotDisplayContainer: {
-    flex: 1, 
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  robotImage: {
-    width: 200, 
-    height: 200,
-    tintColor: ICON_TINT_GREY,
-  },
-  presetControls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 15,
-    marginTop: 20,
-  },
-  arrowIcon: {
-    fontSize: 24,
-    color: ACCENT_GREY,
-  },
-  presetLabelContainer: {
-    backgroundColor: ACCENT_GREY,
-    borderRadius: 5,
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-  },
-  presetLabel: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: 'white',
-  },
-
-  //BOTTOM PANEL
-  bottomPanel: {
-    backgroundColor: PANEL_DARK_BG,
-    padding: 20,
-    borderTopLeftRadius: 15,
-    borderTopRightRadius: 15,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -5 },
-    shadowOpacity: 0.8,
-    shadowRadius: 10,
-    elevation: 15,
-  },
-  systemInfoRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-start',
-    marginBottom: 15,
-  },
-  systemActiveText: {
-    fontSize: 14,
-    color: LIGHT_GREY,
-  },
-  bottomButtonsGrid: {
-    marginBottom: 20,
-  },
-  buttonRow2: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    width: '100%',
-    marginBottom: 15, 
-    gap: 15,
-  },
-  buttonRow2Item: {
-    backgroundColor: ACCENT_GREY,
-    width: '45%', 
-    aspectRatio: 1.2,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 10,
-  },
-  buttonRow3: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    width: '100%',
-    gap: 10, 
-  },
-  buttonRow3Item: {
-    backgroundColor: ACCENT_GREY,
-    width: '30%', 
-    aspectRatio: 1.2,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 10,
-  },
-  bottomButtonIcon: {
-    width: 40,
-    height: 40,
-    tintColor: 'white',
-    marginBottom: 5,
-  },
-  bottomButtonText: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: 'white',
-    textAlign: 'center',
-  },
-  allSystemsText: {
-    fontSize: 12,
-    color: LIGHT_GREY,
-    textAlign: 'center',
-    marginTop: 10,
-  },
+    safeArea: {
+        flex: 1,
+        backgroundColor: LIGHT_GREY,
+    },
+    background: {
+        flex: 1,
+        width: '100%',
+        height: '100%',
+    },
+    
+    floatingIconsLayer: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingHorizontal: 20,
+        paddingTop: 20, 
+        width: '100%',
+        zIndex: 10,
+    },
+    topLeftIcons: {
+        width: 0, 
+    },
+    topRightIcons: {
+        flexDirection: 'row',
+        gap: 15,
+    },
+    
+    floatingIcon: {
+        width: ICON_SIZE, 
+        height: ICON_SIZE,
+        tintColor: DARK_ACCENT_GREY, 
+    },
 });
 
 export default MainMenuScreen;
