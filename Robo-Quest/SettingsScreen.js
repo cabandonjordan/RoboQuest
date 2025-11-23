@@ -3,228 +3,499 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   TouchableOpacity,
   Switch,
-  // Platform import removed as it was only used for the header
+  Dimensions,
 } from 'react-native';
-import Slider from '@react-native-community/slider'; // Requires installing '@react-native-community/slider'
+import { useNavigation } from '@react-navigation/native';
+import Slider from '@react-native-community/slider';
 
-function SettingsScreen() {
-  // State for Audio Sliders
-  const [musicVolume, setMusicVolume] = useState(0.7);
-  const [soundFxVolume, setSoundFxVolume] = useState(0.5);
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-  // State for Miscellaneous Switches
-  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-  const [vibrationsEnabled, setVibrationsEnabled] = useState(false);
-
-  // handleBack function removed
-
-  const handleResetAccount = () => {
-    console.log('Account reset initiated...');
-    // In a real app, you might show a confirmation modal here
-  };
-
-  // Helper component for horizontal line divider
-  const Divider = () => <View style={styles.divider} />;
-
-  // Component to simulate the simple text input look from the image
-  const LabeledValue = ({ label, value }) => (
-    <View style={styles.labeledRow}>
-      <Text style={styles.labelText}>{label}</Text>
-      <View style={styles.valueContainer}>
-        <Text style={styles.valueText}>{value}</Text>
-      </View>
-    </View>
-  );
-
+function BlueButton({ children, style, onPress }) {
   return (
-    <View style={styles.container}>
-      {/* The simulated top bar and header/back button components 
-        have been removed to avoid duplication with a navigation stack. 
-      */}
-
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* =======================
-          Profile Section
-        ======================= */}
-        <Text style={styles.sectionTitle}>Profile</Text>
-
-        <View style={styles.profileContent}>
-          <LabeledValue label="Username:" value="MortLover325" />
-          <LabeledValue label="Email:" value="mort.more@gmail.com" />
-        </View>
-
-        <TouchableOpacity style={styles.resetButton} onPress={handleResetAccount}>
-          <Text style={styles.resetButtonText}>Reset Account</Text>
-        </TouchableOpacity>
-
-        <Divider />
-
-        {/* =======================
-          Audio Section
-        ======================= */}
-        <Text style={styles.sectionTitle}>Audio</Text>
-
-        {/* Music Slider */}
-        <View style={styles.sliderGroup}>
-          <Text style={styles.sliderLabel}>Music</Text>
-          <Slider
-            style={styles.slider}
-            minimumValue={0}
-            maximumValue={1}
-            minimumTrackTintColor="#777"
-            maximumTrackTintColor="#ccc"
-            thumbTintColor="#fff"
-            value={musicVolume}
-            onValueChange={setMusicVolume}
-          />
-        </View>
-
-        {/* Sound FX Slider */}
-        <View style={styles.sliderGroup}>
-          <Text style={styles.sliderLabel}>Sound FX</Text>
-          <Slider
-            style={styles.slider}
-            minimumValue={0}
-            maximumValue={1}
-            minimumTrackTintColor="#777"
-            maximumTrackTintColor="#ccc"
-            thumbTintColor="#fff"
-            value={soundFxVolume}
-            onValueChange={setSoundFxVolume}
-          />
-        </View>
-
-        <Divider />
-
-        {/* =======================
-          Miscellaneous Section
-        ======================= */}
-        <Text style={styles.sectionTitle}>Miscellaneous</Text>
-
-        {/* Notifications Switch */}
-        <View style={styles.switchRow}>
-          <Text style={styles.switchText}>Notifications</Text>
-          <Switch
-            trackColor={{ false: '#767577', true: '#81b0ff' }}
-            thumbColor={notificationsEnabled ? '#fff' : '#f4f3f4'}
-            ios_backgroundColor="#3e3e3e"
-            onValueChange={setNotificationsEnabled}
-            value={notificationsEnabled}
-          />
-        </View>
-
-        {/* Vibrations Switch */}
-        <View style={styles.switchRow}>
-          <Text style={styles.switchText}>Vibrations</Text>
-          <Switch
-            trackColor={{ false: '#767577', true: '#81b0ff' }}
-            thumbColor={vibrationsEnabled ? '#fff' : '#f4f3f4'}
-            ios_backgroundColor="#3e3e3e"
-            onValueChange={setVibrationsEnabled}
-            value={vibrationsEnabled}
-          />
-        </View>
-        <View style={{ height: 50 }} />
-      </ScrollView>
-    </View>
+    <TouchableOpacity style={[styles.blueButton, style]} onPress={onPress} activeOpacity={0.8}>
+      <Text style={styles.blueButtonText}>{children}</Text>
+    </TouchableOpacity>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
+function SettingsScreen() {
+  const navigation = useNavigation();
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const [vibrationsEnabled, setVibrationsEnabled] = useState(false);
+  const [showAudioModal, setShowAudioModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [musicEnabled, setMusicEnabled] = useState(true);
+  const [sfxEnabled, setSfxEnabled] = useState(true);
+  const [musicVolume, setMusicVolume] = useState(0.7);
+  const [sfxVolume, setSfxVolume] = useState(0.5);
+
+  const handleClose = () => {
+    navigation.goBack();
+  };
+
+  const handleAudioPress = () => {
+    setShowAudioModal(true);
+  };
+
+  const handleCloseAudioModal = () => {
+    setShowAudioModal(false);
+  };
+
+  const handleDeletePress = () => {
+    setShowDeleteModal(true);
+  };
+
+  const handleCloseDeleteModal = () => {
+    setShowDeleteModal(false);
+  };
+
+  const handleConfirmDelete = () => {
+    console.log('Account deletion confirmed');
+    // Add actual account deletion logic here
+    setShowDeleteModal(false);
+    // navigation.navigate('LoginScreen'); // Navigate to login after deletion
+  };
+
+  return (
+    <View style={styles.screenContainer}>
+      <View style={styles.modalContainer}>
+        <TouchableOpacity style={styles.closeButton} onPress={handleClose}>
+          <Text style={styles.closeText}>✕</Text>
+        </TouchableOpacity>
+
+        <Text style={styles.modalTitle}>Settings</Text>
+
+        <View style={styles.modalContent}>
+
+          <View style={styles.gridRow}>
+            <BlueButton style={styles.gridItem} onPress={handleAudioPress}>Audio</BlueButton>
+            <BlueButton style={styles.gridItem}>English</BlueButton>
+          </View>
+
+          <View style={styles.gridRow}>
+            <BlueButton style={styles.gridItem}>Change Name</BlueButton>
+            <TouchableOpacity style={[styles.blueButton, styles.gridItem, styles.deleteButton]} onPress={handleDeletePress} activeOpacity={0.8}>
+              <Text style={styles.blueButtonText}>Delete Account</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.spacer} />
+
+          <View style={styles.gridRowSmall}>
+            <BlueButton style={styles.helpItem}>Terms of Service</BlueButton>
+            <BlueButton style={styles.helpItem}>Privacy Policy</BlueButton>
+          </View>
+
+          <View style={styles.bottomRow}>
+            <TouchableOpacity style={styles.grayButton}><Text style={styles.grayText}>Credits</Text></TouchableOpacity>
+          </View>
+          
+        </View>
+      </View>
+
+      {/* Audio Settings Modal */}
+      {showAudioModal && (
+        <View style={styles.audioModalOverlay}>
+          <View style={styles.audioModalContainer}>
+            <TouchableOpacity style={styles.closeButton} onPress={handleCloseAudioModal}>
+              <Text style={styles.closeText}>✕</Text>
+            </TouchableOpacity>
+
+            <Text style={styles.audioModalTitle}>Audio Settings</Text>
+
+            <View style={styles.audioContent}>
+              {/* Music Toggle */}
+              <View style={styles.audioSection}>
+                <Text style={styles.audioLabel}>Music</Text>
+                <TouchableOpacity
+                  style={[styles.toggleButton, musicEnabled && styles.toggleButtonOn]}
+                  onPress={() => setMusicEnabled(!musicEnabled)}
+                >
+                  <Text style={styles.toggleText}>{musicEnabled ? 'ON' : 'OFF'}</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* SFX Toggle */}
+              <View style={styles.audioSection}>
+                <Text style={styles.audioLabel}>SFX</Text>
+                <TouchableOpacity
+                  style={[styles.toggleButton, sfxEnabled && styles.toggleButtonOn]}
+                  onPress={() => setSfxEnabled(!sfxEnabled)}
+                >
+                  <Text style={styles.toggleText}>{sfxEnabled ? 'ON' : 'OFF'}</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Music Volume */}
+              <View style={styles.volumeSection}>
+                <Text style={styles.volumeLabel}>Music Volume</Text>
+                <View style={styles.sliderContainer}>
+                  <Slider
+                    style={styles.slider}
+                    minimumValue={0}
+                    maximumValue={1}
+                    value={musicVolume}
+                    onValueChange={setMusicVolume}
+                    minimumTrackTintColor="#4CAF50"
+                    maximumTrackTintColor="#a8b8c8"
+                    thumbTintColor="#2e7d32"
+                  />
+                </View>
+              </View>
+
+              {/* SFX Volume */}
+              <View style={styles.volumeSection}>
+                <Text style={styles.volumeLabel}>SFX Volume</Text>
+                <View style={styles.sliderContainer}>
+                  <Slider
+                    style={styles.slider}
+                    minimumValue={0}
+                    maximumValue={1}
+                    value={sfxVolume}
+                    onValueChange={setSfxVolume}
+                    minimumTrackTintColor="#4CAF50"
+                    maximumTrackTintColor="#a8b8c8"
+                    thumbTintColor="#2e7d32"
+                  />
+                </View>
+              </View>
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* Delete Account Confirmation Modal */}
+      {showDeleteModal && (
+        <View style={styles.audioModalOverlay}>
+          <View style={styles.deleteModalContainer}>
+            <View style={styles.deleteModalHeader}>
+              <Text style={styles.deleteModalTitle}>Delete Account</Text>
+              <TouchableOpacity style={styles.modalCloseButton} onPress={handleCloseDeleteModal}>
+                <Text style={styles.closeText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.deleteContent}>
+              <Text style={styles.deleteWarningText}>
+                Are you sure you want to delete your account?
+              </Text>
+              <Text style={styles.deleteSubText}>
+                This action cannot be undone. All your data will be permanently deleted.
+              </Text>
+
+              <View style={styles.deleteButtonsRow}>
+                <TouchableOpacity style={styles.cancelButton} onPress={handleCloseDeleteModal}>
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.confirmDeleteButton} onPress={handleConfirmDelete}>
+                  <Text style={styles.confirmDeleteText}>Delete</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </View>
+      )}
+    </View>
+  );
+}const styles = StyleSheet.create({
+  screenContainer: {
     flex: 1,
-    backgroundColor: '#fff', // White background for the main content area
-  },
-  // topBar, topBarTitle, header, backButton, and backIcon styles have been removed
-  
-  scrollContent: {
-    paddingHorizontal: 20,
-    paddingTop: 30, // Keep some padding at the top for visual spacing
-    paddingBottom: 20,
-  },
-  sectionTitle: {
-    fontSize: 24,
-    fontWeight: 'normal',
-    color: '#333',
-    marginBottom: 20,
-    textAlign: 'center',
-  },
-  // --- Profile Styles ---
-  profileContent: {
-    marginBottom: 30,
-  },
-  labeledRow: {
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
     alignItems: 'center',
+  },
+  modalContainer: {
+    width: SCREEN_WIDTH * 0.85,
+    maxWidth: 400,
+    maxHeight: SCREEN_HEIGHT * 0.75,
+    backgroundColor: '#f2f7fb',
+    borderRadius: 12,
+    borderWidth: 3,
+    borderColor: '#bfc9d6',
+    overflow: 'hidden',
+    paddingTop: 20,
+    alignSelf: 'center',
+    marginTop: 'auto',
+    marginBottom: 'auto',
+  },
+  modalTitle: {
+    fontSize: 28,
+    fontWeight: '800',
+    textAlign: 'center',
+    color: '#333',
     marginBottom: 10,
   },
-  labelText: {
-    fontSize: 14,
-    color: '#555',
+  closeButton: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    zIndex: 10,
+    padding: 8,
+    backgroundColor: '#e74c3c',
+    borderRadius: 20,
+    width: 36,
+    height: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  valueContainer: {
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#ccc',
-    paddingVertical: 5,
-    paddingHorizontal: 15,
-    borderRadius: 5,
-    minWidth: '60%',
-    marginTop: 5,
+  closeText: {
+    fontSize: 18,
+    color: '#fff',
+    fontWeight: '700',
   },
-  valueText: {
+  modalContent: {
+    padding: 16,
+    paddingBottom: 30,
+  },
+  gridRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  gridRowSmall: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  gridItem: {
+    flex: 0.48,
+    paddingVertical: 16,
+  },
+  blueButton: {
+    backgroundColor: '#6b9ac4',
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  blueButtonText: {
+    color: '#fff',
+    fontWeight: '800',
     fontSize: 16,
+    textTransform: 'uppercase',
+  },
+  helpItem: {
+    flex: 0.48,
+    paddingVertical: 12,
+  },
+  spacer: {
+    height: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: '#d6dee6',
+    marginVertical: 12,
+  },
+  bottomRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 8,
+  },
+  grayButton: {
+    width: '48%',
+    backgroundColor: '#9aa6b3',
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  grayText: {
+    color: '#fff',
+    fontWeight: '700',
+  },
+  playerId: {
+    marginTop: 12,
     textAlign: 'center',
     color: '#333',
+    fontSize: 12,
   },
-  resetButton: {
-    alignSelf: 'center',
-    backgroundColor: '#eee',
-    paddingVertical: 8,
-    paddingHorizontal: 25,
-    borderRadius: 5,
-    borderWidth: 1,
-    borderColor: '#ccc',
+  // Audio Modal Styles
+  audioModalOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 100,
+  },
+  audioModalContainer: {
+    width: SCREEN_WIDTH * 0.85,
+    maxWidth: 400,
+    backgroundColor: '#5a6c7d',
+    borderRadius: 12,
+    borderWidth: 4,
+    borderColor: '#3d4a56',
+    padding: 20,
+    paddingTop: 50,
+  },
+  audioModalTitle: {
+    fontSize: 28,
+    fontWeight: '800',
+    textAlign: 'center',
+    color: '#fff',
     marginBottom: 30,
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: 2, height: 2 },
+    textShadowRadius: 3,
   },
-  resetButtonText: {
-    fontSize: 16,
-    color: '#333',
+  audioContent: {
+    backgroundColor: '#d4dce4',
+    borderRadius: 8,
+    padding: 20,
   },
-  // --- Divider Style ---
-  divider: {
-    height: 1,
-    backgroundColor: '#ccc',
-    marginVertical: 40,
-  },
-  // --- Audio Styles ---
-  sliderGroup: {
+  audioSection: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 20,
   },
-  sliderLabel: {
+  audioLabel: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#2d3e50',
+  },
+  toggleButton: {
+    backgroundColor: '#8b9aa8',
+    paddingVertical: 12,
+    paddingHorizontal: 40,
+    borderRadius: 8,
+    borderWidth: 3,
+    borderColor: '#6a7987',
+    minWidth: 120,
+  },
+  toggleButtonOn: {
+    backgroundColor: '#4CAF50',
+    borderColor: '#357a38',
+  },
+  toggleText: {
     fontSize: 18,
-    color: '#555',
+    fontWeight: '800',
+    color: '#fff',
     textAlign: 'center',
-    marginBottom: 5,
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
+  },
+  volumeSection: {
+    marginBottom: 25,
+  },
+  volumeLabel: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#2d3e50',
+    textAlign: 'center',
+    marginBottom: 10,
+  },
+  sliderContainer: {
+    backgroundColor: '#a8b8c8',
+    borderRadius: 8,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderWidth: 2,
+    borderColor: '#8a98a6',
   },
   slider: {
     width: '100%',
     height: 40,
-    // Note: The slider thumb is styled via props (thumbTintColor) to match the white circle.
   },
-  // --- Miscellaneous Styles ---
-  switchRow: {
+  // Delete Button Style
+  deleteButton: {
+    backgroundColor: '#e74c3c',
+  },
+  // Delete Confirmation Modal Styles
+  deleteModalContainer: {
+    width: SCREEN_WIDTH * 0.85,
+    maxWidth: 380,
+    backgroundColor: '#5a6c7d',
+    borderRadius: 12,
+    borderWidth: 4,
+    borderColor: '#3d4a56',
+    padding: 20,
+    paddingTop: 20,
+  },
+  deleteModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+    position: 'relative',
+  },
+  deleteModalTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    textAlign: 'center',
+    color: '#ff4444',
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: 2, height: 2 },
+    textShadowRadius: 3,
+  },
+  modalCloseButton: {
+    position: 'absolute',
+    right: 0,
+    padding: 8,
+    backgroundColor: '#e74c3c',
+    borderRadius: 20,
+    width: 36,
+    height: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  deleteContent: {
+    backgroundColor: '#d4dce4',
+    borderRadius: 8,
+    padding: 20,
+  },
+  deleteWarningText: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#2d3e50',
+    textAlign: 'center',
+    marginBottom: 15,
+  },
+  deleteSubText: {
+    fontSize: 14,
+    color: '#5a6c7d',
+    textAlign: 'center',
+    marginBottom: 25,
+    lineHeight: 20,
+  },
+  deleteButtonsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 15,
-    paddingHorizontal: 10,
+    gap: 10,
   },
-  switchText: {
-    fontSize: 18,
-    color: '#555',
+  cancelButton: {
+    flex: 1,
+    backgroundColor: '#6b9ac4',
+    paddingVertical: 14,
+    borderRadius: 8,
+    borderWidth: 3,
+    borderColor: '#4a7a9e',
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#fff',
+    textAlign: 'center',
+    textTransform: 'uppercase',
+  },
+  confirmDeleteButton: {
+    flex: 1,
+    backgroundColor: '#e74c3c',
+    paddingVertical: 14,
+    borderRadius: 8,
+    borderWidth: 3,
+    borderColor: '#c0392b',
+  },
+  confirmDeleteText: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#fff',
+    textAlign: 'center',
+    textTransform: 'uppercase',
   },
 });
 

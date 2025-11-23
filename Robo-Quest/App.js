@@ -71,7 +71,15 @@ function App() {
         />
         
         {/* All destination screens. These will automatically have a header and back button (as seen in your Settings image) */}
-        <Stack.Screen name="Settings" component={SettingsScreen} />
+        <Stack.Screen 
+          name="Settings" 
+          component={SettingsScreen} 
+          options={{ 
+            presentation: 'transparentModal',
+            headerShown: false,
+            animation: 'fade'
+          }} 
+        />
         <Stack.Screen name="Collection" component={CollectionScreen} />
         <Stack.Screen name="Journal" component={JournalScreen} />
         <Stack.Screen name="Battle" component={BattleScreen} />
