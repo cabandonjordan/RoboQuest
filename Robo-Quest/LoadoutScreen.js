@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, Modal, Pressable, Image, ScrollView, TextInput, Alert } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, Modal, Pressable, Image, ScrollView, TextInput, Alert, ActivityIndicator } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { auth, db, doc, setDoc, getDoc, onAuthStateChanged } from './database/firebase';
 
 const COLORS = {
     ACCENT_GREY: '#5B676D',
@@ -110,16 +111,21 @@ const CategorySection = ({ title, parts, currentLoadout, onEquip }) => {
     );
 };
 
+const DEFAULT_LOADOUT = {
+    Chassis: 'ChassisGeneralis',
+    Engines: 'EngineGeneralis',
+    Wheels: 'WheelsGeneralis',
+    Weapon: 'WeaponGeneralis'
+};
+
 function LoadoutScreen() {
     const navigation = useNavigation();
     
+    const [currentUser, setCurrentUser] = useState(null);
+    const [isLoading, setIsLoading] = useState(true);
+    
     const [presets, setPresets] = useState({
-        Default: {
-            Chassis: null,
-            Engines: null,
-            Wheels: null,
-            Weapon: null
-        }
+        Default: { ...DEFAULT_LOADOUT }
     });
     
     const [selectedType, setSelectedType] = useState('Innovare');
@@ -127,7 +133,7 @@ function LoadoutScreen() {
     const [selectedPartFilter, setSelectedPartFilter] = useState('All');
     const [activeDropdown, setActiveDropdown] = useState(null); 
 
-    const [loadout, setLoadout] = useState(presets.Default); 
+    const [loadout, setLoadout] = useState({ ...DEFAULT_LOADOUT }); 
     const [selectedPreset, setSelectedPreset] = useState("Default"); 
 
     const [presetNameInput, setPresetNameInput] = useState("");
@@ -135,6 +141,53 @@ function LoadoutScreen() {
     const [renameVisible, setRenameVisible] = useState(false);
     const [renameOldName, setRenameOldName] = useState("");
     const [renameInput, setRenameInput] = useState("");
+
+    // Save presets to Firebase
+    const savePresetsToFirebase = async (presetsToSave, user) => {
+        const userToUse = user || currentUser;
+        if (!userToUse) return;
+        
+        const userName = userToUse.displayName || userToUse.email;
+        try {
+            const docRef = doc(db, 'Roboquest-Loadout', userName);
+            await setDoc(docRef, { presets: presetsToSave }, { merge: true });
+        } catch (error) {
+            console.log("Error saving presets:", error);
+        }
+    };
+
+    // Load presets from Firebase on mount
+    useEffect(() => {
+        const unsubscribe = onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                setCurrentUser(user);
+                const userName = user.displayName || user.email;
+                try {
+                    const docRef = doc(db, 'Roboquest-Loadout', userName);
+                    const docSnap = await getDoc(docRef);
+                    
+                    if (docSnap.exists()) {
+                        const data = docSnap.data();
+                        if (data.presets && typeof data.presets === 'object') {
+                            const loadedPresets = {
+                                Default: data.presets.Default || { ...DEFAULT_LOADOUT },
+                                ...data.presets
+                            };
+                            setPresets(loadedPresets);
+                            setLoadout(loadedPresets.Default || { ...DEFAULT_LOADOUT });
+                        }
+                    }
+                } catch (error) {
+                    console.log("Error loading presets:", error);
+                }
+            } else {
+                setCurrentUser(null);
+            }
+            setIsLoading(false);
+        });
+
+        return () => unsubscribe();
+    }, []);
 
     const getWeaponOffset = () => {
         const weapon = loadout.Weapon;
@@ -165,12 +218,24 @@ function LoadoutScreen() {
 
     const handleEquip = (category, partName) => {
         console.log(`Equipping ${partName} to ${category}`);
-        setLoadout(prev => ({
-            ...prev,
-            [category]: partName
-        }));
         
-        setSelectedPreset(null);
+        const isAlreadyEquipped = loadout[category] === partName;
+        const newLoadout = {
+            ...loadout,
+            [category]: isAlreadyEquipped ? null : partName
+        };
+        
+        setLoadout(newLoadout);
+        
+        // Auto-save to selected preset (including Default)
+        if (selectedPreset) {
+            const newPresets = {
+                ...presets,
+                [selectedPreset]: newLoadout
+            };
+            setPresets(newPresets);
+            savePresetsToFirebase(newPresets);
+        }
     };
     
     const applyPreset = (name) => {
@@ -213,10 +278,12 @@ function LoadoutScreen() {
                         style: "destructive",
                         onPress: () => {
                             console.log("Overwriting preset:", name);
-                            setPresets(prev => ({
-                                ...prev,
+                            const newPresets = {
+                                ...presets,
                                 [name]: { ...loadout }
-                            }));
+                            };
+                            setPresets(newPresets);
+                            savePresetsToFirebase(newPresets);
                             setSelectedPreset(name);
                             setPresetNameInput("");
                             Alert.alert("Success", `Preset "${name}" saved!`);
@@ -228,14 +295,13 @@ function LoadoutScreen() {
         }
 
         console.log("Saving new preset:", name);
-        setPresets(prev => {
-            const newPresets = {
-                ...prev,
-                [name]: { ...loadout }
-            };
-            console.log("New presets state:", newPresets);
-            return newPresets;
-        });
+        const newPresets = {
+            ...presets,
+            [name]: { ...loadout }
+        };
+        console.log("New presets state:", newPresets);
+        setPresets(newPresets);
+        savePresetsToFirebase(newPresets);
 
         setSelectedPreset(name);
         setPresetNameInput("");
@@ -257,15 +323,14 @@ function LoadoutScreen() {
                     text: "Delete", 
                     style: "destructive",
                     onPress: () => {
-                        setPresets(prev => {
-                            const updated = { ...prev };
-                            delete updated[presetName];
-                            return updated;
-                        });
+                        const updated = { ...presets };
+                        delete updated[presetName];
+                        setPresets(updated);
+                        savePresetsToFirebase(updated);
                         
                         if (selectedPreset === presetName) {
                             setSelectedPreset("Default");
-                            setLoadout(presets.Default);
+                            setLoadout(updated.Default || { ...DEFAULT_LOADOUT });
                         }
                     }
                 }
@@ -285,16 +350,15 @@ function LoadoutScreen() {
             return;
         }
 
-        setPresets(prev => {
-            const updated = { ...prev };
-            updated[newName] = updated[renameOldName];
+        const updated = { ...presets };
+        updated[newName] = updated[renameOldName];
 
-            if (renameOldName !== "Default") {
-                delete updated[renameOldName];
-            }
+        if (renameOldName !== "Default") {
+            delete updated[renameOldName];
+        }
 
-            return updated;
-        });
+        setPresets(updated);
+        savePresetsToFirebase(updated);
 
         if (selectedPreset === renameOldName) {
             setSelectedPreset(newName);
@@ -318,6 +382,16 @@ function LoadoutScreen() {
     const equippedChassis = loadout.Chassis;
     const equippedEngine = loadout.Engines;
     const equippedWheels = loadout.Wheels;
+
+    // Show loading screen while fetching data
+    if (isLoading) {
+        return (
+            <SafeAreaView style={[styles.safeArea, { justifyContent: 'center', alignItems: 'center' }]}>
+                <ActivityIndicator size="large" color="#007AFF" />
+                <Text style={{ color: '#FFFFFF', fontSize: 16, marginTop: 10 }}>Loading...</Text>
+            </SafeAreaView>
+        );
+    }
 
     return (
         <SafeAreaView style={styles.safeArea}>
