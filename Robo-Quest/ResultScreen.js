@@ -4,7 +4,7 @@ import { useRoute, useNavigation } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { detectObjectsInImage, analyzeSelectedObject } from './aifunctions/gemini';
+import { detectObjectsInImage, analyzeSelectedObject, detectAndAnalyzeMainObject } from './aifunctions/gemini';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -29,12 +29,13 @@ const fonts = {
 function ResultScreen() {
   const route = useRoute();
   const navigation = useNavigation();
-  const { imageUri } = route.params || {};
+  const { imageUri, cameraMode = 'batch' } = route.params || {};
 
   const [isDetecting, setIsDetecting] = useState(true);
   const [error, setError] = useState(null);
   const [detectionResult, setDetectionResult] = useState(null);
   const [analyzingObject, setAnalyzingObject] = useState(null);
+  const [isAutoAnalyzing, setIsAutoAnalyzing] = useState(false);
 
   // Animation refs
   const scanLineAnim = useRef(new Animated.Value(0)).current;
@@ -148,6 +149,84 @@ function ResultScreen() {
       const delay = (ms) => new Promise(res => setTimeout(res, ms));
 
       try {
+        // Single mode: use optimized function that detects and analyzes in one call
+        if (cameraMode === 'single') {
+          const [result] = await Promise.all([
+            detectAndAnalyzeMainObject(imageUri),
+            delay(1500) // Minimum display time for UX
+          ]);
+
+          if (result.error) {
+            setError(result.error);
+            setIsDetecting(false);
+            return;
+          }
+
+          // Single mode returns object (singular) and sceneContext
+          if (result.object) {
+            // Show auto-analyzing state
+            setIsAutoAnalyzing(true);
+
+            // Save to journal
+            try {
+              const journalEntry = {
+                id: Date.now().toString(),
+                uri: imageUri,
+                timestamp: Date.now(),
+                selectedObject: result.object.name,
+                description: result.object.name,
+                funFact: result.object.funFact,
+                the_science_in_action: result.object.the_science_in_action,
+                category: result.object.category,
+                confidence: result.object.confidence,
+              };
+
+              const existingEntriesJson = await AsyncStorage.getItem('journalPhotos');
+              const existingEntries = existingEntriesJson ? JSON.parse(existingEntriesJson) : [];
+
+              const existingIndex = existingEntries.findIndex(entry => entry.uri === imageUri);
+              
+              if (existingIndex >= 0) {
+                existingEntries[existingIndex] = {
+                  ...existingEntries[existingIndex],
+                  ...journalEntry,
+                  id: existingEntries[existingIndex].id,
+                };
+              } else {
+                existingEntries.unshift(journalEntry);
+              }
+
+              await AsyncStorage.setItem('journalPhotos', JSON.stringify(existingEntries));
+              console.log('✓ Saved journal entry (single mode)');
+            } catch (journalError) {
+              console.error('❌ Error saving journal entry:', journalError);
+            }
+
+            // Convert single object format to match AnalyzeScreen expectations
+            const analysisResult = {
+              objectName: result.object.name,
+              confidence: result.object.confidence,
+              category: result.object.category,
+              funFact: result.object.funFact,
+              the_science_in_action: result.object.the_science_in_action,
+            };
+
+            // Navigate directly to AnalyzeScreen with pre-analyzed result
+            navigation.navigate('Analyze', {
+              imageUri,
+              detectedObjects: [result.object], // Convert to array for compatibility
+              sceneContext: result.sceneContext,
+              preAnalyzedResult: analysisResult,
+              selectedObjectName: result.object.name,
+            });
+          } else {
+            setError('No main object detected in the image. Please try again with a clearer photo.');
+            setIsDetecting(false);
+          }
+          return;
+        }
+
+        // Batch mode: use standard detection (detects multiple objects)
         const [result] = await Promise.all([
           detectObjectsInImage(imageUri),
           delay(1500) // Minimum display time for UX
@@ -277,8 +356,60 @@ function ResultScreen() {
     );
   }
 
-  // Success State - Show Results
-  if (detectionResult && !isDetecting) {
+  // Auto-analyzing state (single mode)
+  if (isAutoAnalyzing && detectionResult && !isDetecting) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.content}>
+          <View style={styles.imageContainer}>
+            <Image source={{ uri: imageUri }} style={styles.image} />
+          </View>
+
+          <View style={styles.statusContainer}>
+            <View style={styles.particleContainer}>
+              {particleAnims.map((particle, index) => (
+                <Animated.View
+                  key={index}
+                  style={[
+                    styles.particle,
+                    {
+                      transform: [
+                        { translateX: particle.x },
+                        { translateY: particle.y },
+                        { scale: particle.scale },
+                      ],
+                      opacity: particle.opacity,
+                    },
+                  ]}
+                />
+              ))}
+
+              <Animated.View style={[styles.scanIconContainer, { transform: [{ rotate: spin }] }]}>
+                <View style={styles.scanIconInner}>
+                  <Ionicons name="analytics" size={70} color={colors.primary} />
+                </View>
+                <View style={styles.scanIconRing} />
+              </Animated.View>
+            </View>
+
+            <View style={styles.statusTextContainer}>
+              <Text style={styles.statusText}>Analyzing Main Object</Text>
+              <Text style={styles.subStatusText}>Getting detailed information...</Text>
+            </View>
+
+            <View style={styles.progressContainer}>
+              <View style={styles.progressBarContainer}>
+                <Animated.View style={[styles.progressBar, { width: progressWidth }]} />
+              </View>
+            </View>
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Success State - Show Results (batch mode only)
+  if (detectionResult && !isDetecting && cameraMode === 'batch') {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.content}>

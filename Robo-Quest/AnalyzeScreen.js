@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Speech from 'expo-speech';
 import { analyzeSelectedObject } from './aifunctions/gemini';
+import { auth, db, doc, setDoc, getDoc, onAuthStateChanged } from './database/firebase';
 
 // Color constants (white theme - matching ResultScreen.js)
 const colors = {
@@ -28,6 +29,87 @@ const fonts = {
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const MODAL_CONTENT_HEIGHT = SCREEN_HEIGHT * 0.75; // 75% of screen height for full modal
 
+// Part images mapping (matching LoadoutScreen.js)
+const PART_IMAGES = {
+  ChassisCreativia: require('./assets/parts/chassis/ChassisCreativia.png'),
+  ChassisGeneralis: require('./assets/parts/chassis/ChassisGeneralis.png'),
+  ChassisInnovare: require('./assets/parts/chassis/ChassisInnovare.png'),
+  EngineCreativia: require('./assets/parts/engines/EngineCreativia.png'),
+  EngineGeneralis: require('./assets/parts/engines/EngineGeneralis.png'),
+  EngineInnovare: require('./assets/parts/engines/EngineInnovare.png'),
+  WeaponCreativia: require('./assets/parts/weapons/WeaponCreativia.png'),
+  WeaponGeneralis: require('./assets/parts/weapons/WeaponGeneralis.png'),
+  WeaponInnovare: require('./assets/parts/weapons/WeaponInnovare.png'),
+  WheelsCreativia: require('./assets/parts/wheels/WheelsCreativia.png'),
+  WheelsGeneralis: require('./assets/parts/wheels/WheelsGeneralis.png'),
+  WheelsInnovare: require('./assets/parts/wheels/WheelsInnovare.png'),
+};
+
+// Part types and categories
+// Note: Part type names match LoadoutScreen.js naming convention
+const PART_TYPES = ['Weapon', 'Chassis', 'Wheels', 'Engine'];
+const PART_CATEGORIES = {
+  'Innovare': 'Innovare',
+  'Generalis': 'Generalis',
+  'Creativia': 'Creativia',
+};
+
+// Function to get a random part based on category
+function getRandomPartForCategory(category) {
+  // Normalize category name (handle case variations)
+  const normalizedCategory = category || 'Generalis';
+  let categoryKey = 'Generalis';
+  
+  if (normalizedCategory.includes('Innovare') || normalizedCategory.includes('innovare')) {
+    categoryKey = 'Innovare';
+  } else if (normalizedCategory.includes('Creativia') || normalizedCategory.includes('creativia')) {
+    categoryKey = 'Creativia';
+  } else if (normalizedCategory.includes('Generalis') || normalizedCategory.includes('generalis')) {
+    categoryKey = 'Generalis';
+  }
+
+  // Randomly select a part type
+  const randomPartType = PART_TYPES[Math.floor(Math.random() * PART_TYPES.length)];
+  
+  // Construct part name (e.g., "WeaponInnovare", "ChassisCreativia", "EngineGeneralis")
+  const partName = `${randomPartType}${categoryKey}`;
+  
+  return partName;
+}
+
+// Function to save part to user's collection in Firebase
+async function savePartToCollection(partName, userId) {
+  if (!userId || !partName) {
+    console.log('Cannot save part: missing userId or partName');
+    return false;
+  }
+
+  try {
+    const userDocRef = doc(db, 'Roboquest-Collection', userId);
+    const userDoc = await getDoc(userDocRef);
+    
+    let parts = [];
+    if (userDoc.exists()) {
+      const data = userDoc.data();
+      parts = data.parts || [];
+    }
+    
+    // Check if part already exists
+    if (!parts.includes(partName)) {
+      parts.push(partName);
+      await setDoc(userDocRef, { parts }, { merge: true });
+      console.log(`✓ Saved part "${partName}" to collection`);
+      return true;
+    } else {
+      console.log(`Part "${partName}" already in collection`);
+      return false;
+    }
+  } catch (error) {
+    console.error('❌ Error saving part to collection:', error);
+    return false;
+  }
+}
+
 export default function AnalyzeScreen() {
   const route = useRoute();
   const navigation = useNavigation();
@@ -40,6 +122,7 @@ export default function AnalyzeScreen() {
   const [analysisResult, setAnalysisResult] = useState(null);
   const [currentPage, setCurrentPage] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
+  const [awardedPart, setAwardedPart] = useState(null);
   const scrollX = React.useRef(new Animated.Value(0)).current;
   const speechRef = useRef(null);
 
@@ -90,6 +173,36 @@ export default function AnalyzeScreen() {
       setAnalysisResult(safeResult);
       setShowResultModal(true);
       setCurrentPage(0);
+
+      // Award random part based on category
+      (async () => {
+        try {
+          const category = safeResult.category;
+          if (category) {
+            const partName = getRandomPartForCategory(category);
+            console.log(`🎁 Awarding part: ${partName} for category: ${category}`);
+            
+            // Store awarded part in state to display it
+            setAwardedPart(partName);
+            
+            // Get current user
+            const currentUser = auth.currentUser;
+            if (currentUser) {
+              const userId = currentUser.uid;
+              const isNewPart = await savePartToCollection(partName, userId);
+              
+              if (isNewPart) {
+                console.log(`✅ New part awarded: ${partName}`);
+              }
+            } else {
+              console.log('No user logged in, part not saved');
+            }
+          }
+        } catch (partError) {
+          console.error('❌ Error awarding part:', partError);
+          // Don't block the UI if part awarding fails
+        }
+      })();
 
       // Save to journal with analysis results
       (async () => {
@@ -155,6 +268,7 @@ export default function AnalyzeScreen() {
     if (!selectedObject) return;
 
     setIsAnalyzing(true);
+    setAwardedPart(null); // Reset awarded part when starting new analysis
 
     try {
       // Ensure boundingBox exists, create default if not
@@ -226,6 +340,35 @@ export default function AnalyzeScreen() {
       setShowResultModal(true);
       setCurrentPage(0);
 
+      // Award random part based on category
+      try {
+        const category = safeResult.category;
+        if (category) {
+          const partName = getRandomPartForCategory(category);
+          console.log(`🎁 Awarding part: ${partName} for category: ${category}`);
+          
+          // Store awarded part in state to display it
+          setAwardedPart(partName);
+          
+          // Get current user
+          const currentUser = auth.currentUser;
+          if (currentUser) {
+            const userId = currentUser.uid;
+            const isNewPart = await savePartToCollection(partName, userId);
+            
+            if (isNewPart) {
+              // Show success message (optional - you can customize this)
+              console.log(`✅ New part awarded: ${partName}`);
+            }
+          } else {
+            console.log('No user logged in, part not saved');
+          }
+        }
+      } catch (partError) {
+        console.error('❌ Error awarding part:', partError);
+        // Don't block the UI if part awarding fails
+      }
+
       // Save to journal with analysis results
       try {
         // Check if AsyncStorage is available
@@ -288,9 +431,9 @@ export default function AnalyzeScreen() {
     navigation.goBack();
   };
 
-  // Function to speak fun fact with Pokedex-like voice
-  const speakFunFact = (text) => {
-    if (!text || text === 'No fun fact available.' || isMuted) return;
+  // Function to speak text with natural assistant voice
+  const speakText = (text) => {
+    if (!text || text === 'No fun fact available.' || text === 'No science information available.' || isMuted) return;
     
     // Stop any ongoing speech
     if (speechRef.current) {
@@ -300,11 +443,11 @@ export default function AnalyzeScreen() {
     // Clean text for speech (remove extra formatting)
     const cleanText = text.replace(/\n+/g, '. ').trim();
     
-    // Configure voice to sound like Pokedex (lower pitch, slower rate)
+    // Configure voice to sound like a natural assistant
     const options = {
       language: 'en-US',
-      pitch: 0.7, // Lower pitch for Pokedex-like sound
-      rate: 0.75, // Slower rate for more robotic feel
+      pitch: 1.0, // Natural pitch for assistant-like sound
+      rate: 0.9, // Natural speaking rate
       quality: Speech.VoiceQuality.Enhanced,
     };
 
@@ -331,11 +474,22 @@ export default function AnalyzeScreen() {
     if (showResultModal && currentPage === 0 && analysisResult?.funFact && !isMuted) {
       // Small delay to ensure modal is fully rendered
       const timer = setTimeout(() => {
-        speakFunFact(analysisResult.funFact);
+        speakText(analysisResult.funFact);
       }, 500);
       return () => clearTimeout(timer);
     }
   }, [showResultModal, currentPage, analysisResult?.funFact, isMuted]);
+
+  // Auto-play science in action when science page is shown
+  useEffect(() => {
+    if (showResultModal && currentPage === 1 && analysisResult?.the_science_in_action && !isMuted) {
+      // Small delay to ensure modal is fully rendered
+      const timer = setTimeout(() => {
+        speakText(analysisResult.the_science_in_action);
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [showResultModal, currentPage, analysisResult?.the_science_in_action, isMuted]);
 
   // Stop speech when modal closes
   useEffect(() => {
@@ -356,9 +510,11 @@ export default function AnalyzeScreen() {
         speechRef.current = null;
       }
     } else {
-      // Resume speech when unmuting (if on fun fact page)
+      // Resume speech when unmuting (if on fun fact or science page)
       if (currentPage === 0 && analysisResult?.funFact) {
-        speakFunFact(analysisResult.funFact);
+        speakText(analysisResult.funFact);
+      } else if (currentPage === 1 && analysisResult?.the_science_in_action) {
+        speakText(analysisResult.the_science_in_action);
       }
     }
   };
@@ -553,7 +709,17 @@ export default function AnalyzeScreen() {
         visible={showResultModal}
         animationType="slide"
         transparent={true}
-        onRequestClose={() => setShowResultModal(false)}
+        onRequestClose={() => {
+          // Stop any ongoing speech when leaving
+          if (speechRef.current) {
+            Speech.stop();
+            speechRef.current = null;
+          }
+          setShowResultModal(false);
+          setAwardedPart(null); // Reset awarded part when closing modal
+          // Navigate back to Camera screen
+          navigation.navigate('Camera');
+        }}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
@@ -568,7 +734,17 @@ export default function AnalyzeScreen() {
                 )}
               </View>
               <TouchableOpacity
-                onPress={() => setShowResultModal(false)}
+                onPress={() => {
+                  // Stop any ongoing speech when leaving
+                  if (speechRef.current) {
+                    Speech.stop();
+                    speechRef.current = null;
+                  }
+                  setShowResultModal(false);
+                  setAwardedPart(null); // Reset awarded part when closing modal
+                  // Navigate back to Camera screen
+                  navigation.navigate('Camera');
+                }}
                 style={styles.closeButton}
               >
                 <Ionicons name="close" size={28} color={colors.lightGray} />
@@ -635,7 +811,20 @@ export default function AnalyzeScreen() {
                   <View style={styles.modalIconContainer}>
                     <Ionicons name="flask" size={48} color={colors.primary} />
                   </View>
-                  <Text style={styles.modalPageTitle}>Science in Action</Text>
+                  <View style={styles.titleRow}>
+                    <Text style={styles.modalPageTitle}>Science in Action</Text>
+                    <TouchableOpacity
+                      onPress={toggleMute}
+                      style={styles.muteButton}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons 
+                        name={isMuted ? "volume-mute" : "volume-high"} 
+                        size={24} 
+                        color={isMuted ? colors.lightGray : colors.primary} 
+                      />
+                    </TouchableOpacity>
+                  </View>
                   <ScrollView 
                     style={styles.modalTextContainer}
                     contentContainerStyle={styles.modalTextContent}
@@ -647,6 +836,34 @@ export default function AnalyzeScreen() {
                   </ScrollView>
                 </View>
               </View>
+
+              {/* Part Reward Page - Only show if part was awarded */}
+              {awardedPart && PART_IMAGES[awardedPart] && (
+                <View style={styles.modalPage}>
+                  <View style={styles.modalPageContent}>
+                    <View style={styles.modalIconContainer}>
+                      <Ionicons name="gift" size={48} color={colors.secondary} />
+                    </View>
+                    <View style={styles.titleRow}>
+                      <Text style={styles.modalPageTitle}>Part Unlocked!</Text>
+                    </View>
+                    <View style={styles.partRewardContent}>
+                      <Image 
+                        source={PART_IMAGES[awardedPart]} 
+                        style={[
+                          styles.partRewardImage,
+                          awardedPart.startsWith('Engine') && styles.partRewardImageLarge
+                        ]}
+                        resizeMode="contain"
+                      />
+                      <Text style={styles.partRewardName}>{awardedPart}</Text>
+                      <Text style={styles.partRewardSubtext}>
+                        This part has been added to your collection!
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              )}
               </ScrollView>
             </View>
 
@@ -654,12 +871,21 @@ export default function AnalyzeScreen() {
             <View style={styles.pageIndicators}>
               <View style={[styles.pageIndicator, currentPage === 0 && styles.pageIndicatorActive]} />
               <View style={[styles.pageIndicator, currentPage === 1 && styles.pageIndicatorActive]} />
+              {awardedPart && PART_IMAGES[awardedPart] && (
+                <View style={[styles.pageIndicator, currentPage === 2 && styles.pageIndicatorActive]} />
+              )}
             </View>
 
             {/* Navigation Hints */}
             <View style={styles.modalFooter}>
               <Text style={styles.modalFooterText}>
-                {currentPage === 0 ? 'Swipe right for Science →' : '← Swipe left for Fun Fact'}
+                {currentPage === 0 
+                  ? 'Swipe right for Science →'
+                  : currentPage === 1 
+                  ? (awardedPart && PART_IMAGES[awardedPart]
+                      ? 'Swipe right for Part Reward →'
+                      : '← Swipe left for Fun Fact')
+                  : '← Swipe left to go back'}
               </Text>
             </View>
           </View>
@@ -1106,6 +1332,35 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 11,
     fontWeight: '600',
+  },
+  partRewardContent: {
+    alignItems: 'center',
+    gap: 16,
+    flex: 1,
+    justifyContent: 'center',
+    paddingVertical: 20,
+  },
+  partRewardImage: {
+    width: 180,
+    height: 180,
+  },
+  partRewardImageLarge: {
+    width: 280,
+    height: 280,
+  },
+  partRewardName: {
+    fontFamily: fonts.heading,
+    fontSize: 20,
+    color: colors.text,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  partRewardSubtext: {
+    fontFamily: fonts.body,
+    fontSize: 16,
+    color: colors.lightGray,
+    textAlign: 'center',
+    marginTop: 8,
   },
 });
 

@@ -97,9 +97,9 @@ function JournalScreen() {
     }
   };
 
-  // Function to speak fun fact with Pokedex-like voice
-  const speakFunFact = (text) => {
-    if (!text || text === 'No fun fact available.' || isMuted) return;
+  // Function to speak text with natural assistant voice
+  const speakText = (text) => {
+    if (!text || text === 'No fun fact available.' || text === 'No science information available.' || isMuted) return;
     
     // Stop any ongoing speech
     if (speechRef.current) {
@@ -109,11 +109,11 @@ function JournalScreen() {
     // Clean text for speech (remove extra formatting)
     const cleanText = text.replace(/\n+/g, '. ').trim();
     
-    // Configure voice to sound like Pokedex (lower pitch, slower rate)
+    // Configure voice to sound like a natural assistant
     const options = {
       language: 'en-US',
-      pitch: 0.7, // Lower pitch for Pokedex-like sound
-      rate: 0.75, // Slower rate for more robotic feel
+      pitch: 1.0, // Natural pitch for assistant-like sound
+      rate: 0.9, // Natural speaking rate
       quality: Speech.VoiceQuality.Enhanced,
     };
 
@@ -140,11 +140,22 @@ function JournalScreen() {
     if (showResultModal && currentPage === 0 && selectedPhoto?.funFact && !isMuted) {
       // Small delay to ensure modal is fully rendered
       const timer = setTimeout(() => {
-        speakFunFact(selectedPhoto.funFact);
+        speakText(selectedPhoto.funFact);
       }, 500);
       return () => clearTimeout(timer);
     }
   }, [showResultModal, currentPage, selectedPhoto?.funFact, isMuted]);
+
+  // Auto-play science in action when science page is shown
+  useEffect(() => {
+    if (showResultModal && currentPage === 1 && selectedPhoto?.the_science_in_action && !isMuted) {
+      // Small delay to ensure modal is fully rendered
+      const timer = setTimeout(() => {
+        speakText(selectedPhoto.the_science_in_action);
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [showResultModal, currentPage, selectedPhoto?.the_science_in_action, isMuted]);
 
   // Stop speech when modal closes
   useEffect(() => {
@@ -165,9 +176,11 @@ function JournalScreen() {
         speechRef.current = null;
       }
     } else {
-      // Resume speech when unmuting (if on fun fact page)
+      // Resume speech when unmuting (if on fun fact or science page)
       if (currentPage === 0 && selectedPhoto?.funFact) {
-        speakFunFact(selectedPhoto.funFact);
+        speakText(selectedPhoto.funFact);
+      } else if (currentPage === 1 && selectedPhoto?.the_science_in_action) {
+        speakText(selectedPhoto.the_science_in_action);
       }
     }
   };
@@ -316,7 +329,20 @@ function JournalScreen() {
                     <View style={styles.modalIconContainer}>
                       <Ionicons name="flask" size={48} color={colors.primary} />
                     </View>
-                    <Text style={styles.modalPageTitle}>Science in Action</Text>
+                    <View style={styles.titleRow}>
+                      <Text style={styles.modalPageTitle}>Science in Action</Text>
+                      <TouchableOpacity
+                        onPress={toggleMute}
+                        style={styles.muteButton}
+                        activeOpacity={0.7}
+                      >
+                        <Ionicons 
+                          name={isMuted ? "volume-mute" : "volume-high"} 
+                          size={24} 
+                          color={isMuted ? colors.lightGray : colors.primary} 
+                        />
+                      </TouchableOpacity>
+                    </View>
                     <ScrollView 
                       style={styles.modalTextContainer}
                       contentContainerStyle={styles.modalTextContent}
