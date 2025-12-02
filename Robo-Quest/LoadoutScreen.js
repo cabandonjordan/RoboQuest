@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, Modal, Pressable, Image, ScrollView, TextInput, Alert, ActivityIndicator } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useIsFocused } from '@react-navigation/native';
 import { auth, db, doc, setDoc, getDoc, onAuthStateChanged } from './database/firebase';
 
 const COLORS = {
@@ -10,6 +10,7 @@ const COLORS = {
     ICON_TINT: '#848689',
     WHITE: '#FFFFFF',
     SELECTED_BORDER: '#007AFF',
+    LOCKED: '#888888',
 };
 
 const ASSETS = {
@@ -45,6 +46,20 @@ const DROPDOWN_OPTIONS = {
     TypeBox: ['Innovare', 'General', 'Creative', 'Engineer'],
 };
 
+const DEFAULT_LOADOUT = {
+    Chassis: 'ChassisGeneralis',
+    Engines: 'EngineGeneralis',
+    Wheels: 'WheelsGeneralis',
+    Weapon: 'WeaponGeneralis'
+};
+
+const DEFAULT_UNLOCKED_PARTS = {
+    Weapon: ['WeaponGeneralis'],
+    Chassis: ['ChassisGeneralis'],
+    Wheels: ['WheelsGeneralis'],
+    Engines: ['EngineGeneralis'],
+};
+
 const DropdownModal = ({ isVisible, onClose, options, onSelect, positionStyle }) => (
     <Modal animationType="fade" transparent={true} visible={isVisible} onRequestClose={onClose}>
         <Pressable style={styles.modalOverlay} onPress={onClose}>
@@ -65,44 +80,76 @@ const FilterBox = ({ label, value, onPress }) => (
     </TouchableOpacity>
 );
 
-const PartAppearanceItem = ({ label, isEquipped, onEquip }) => {
+const PartAppearanceItem = ({ label, isEquipped, onEquip, isUnlocked }) => {
     const imageSource = ASSETS.parts[label];
     if (!imageSource) return null;
 
+    const isInnovare = label.includes('Innovare');
+    const isCreativia = label.includes('Creativia');
+
     return (
         <TouchableOpacity 
-            style={styles.partItem} 
-            onPress={() => onEquip(label)}
-            activeOpacity={0.7}
+            style={[styles.partItem, !isUnlocked && styles.lockedPartItem]} 
+            onPress={() => isUnlocked && onEquip(label)}
+            activeOpacity={isUnlocked ? 0.7 : 1}
+            disabled={!isUnlocked}
         >
-            <View style={[styles.imageContainer, isEquipped && styles.equippedContainer]}>
+            <View style={[
+                styles.imageContainer, 
+                isEquipped && styles.equippedContainer,
+                !isUnlocked && styles.lockedContainer
+            ]}>
                 <Image 
                     source={imageSource}
-                    style={styles.partImage}
+                    style={[styles.partImage, !isUnlocked && styles.lockedImage]}
                     resizeMode="contain"
                 />
+                {!isUnlocked && (
+                    <View style={styles.lockOverlay}>
+                        <Text style={styles.lockText}>LOCKED</Text>
+                        <Text style={styles.unlockHint}>
+                            {isInnovare ? 'Scan Innovare object' : 
+                             isCreativia ? 'Scan Creativia object' : 
+                             'Scan General object'}
+                        </Text>
+                    </View>
+                )}
             </View>
-            <Text style={[styles.partLabel, isEquipped && styles.equippedText]}>
+            <Text style={[
+                styles.partLabel, 
+                isEquipped && styles.equippedText,
+                !isUnlocked && styles.lockedText
+            ]}>
                 {label}
+                {!isUnlocked && " 🔒"}
             </Text>
         </TouchableOpacity>
     );
 };
 
-const CategorySection = ({ title, parts, currentLoadout, onEquip }) => {
+const CategorySection = ({ title, parts, currentLoadout, onEquip, unlockedParts }) => {
     const isPartEquipped = (partName) => {
         return Object.values(currentLoadout).includes(partName);
     };
 
+    const unlockedCount = unlockedParts[title]?.length || 0;
+    const totalCount = parts.length;
+
     return (
         <View style={styles.categorySection}>
-            <Text style={styles.categoryTitle}>{title}</Text>
+            <Text style={styles.categoryTitle}>
+                {title} 
+                <Text style={styles.unlockCount}>
+                    {' '}({unlockedCount}/{totalCount} unlocked)
+                </Text>
+            </Text>
             <View style={styles.partRow}>
                 {parts.map((partName) => (
                     <PartAppearanceItem 
                         key={partName} 
                         label={partName} 
                         isEquipped={isPartEquipped(partName)}
+                        isUnlocked={unlockedParts[title]?.includes(partName) || false}
                         onEquip={() => onEquip(title, partName)}
                     />
                 ))}
@@ -111,18 +158,14 @@ const CategorySection = ({ title, parts, currentLoadout, onEquip }) => {
     );
 };
 
-const DEFAULT_LOADOUT = {
-    Chassis: 'ChassisGeneralis',
-    Engines: 'EngineGeneralis',
-    Wheels: 'WheelsGeneralis',
-    Weapon: 'WeaponGeneralis'
-};
-
 function LoadoutScreen() {
     const navigation = useNavigation();
+    const isFocused = useIsFocused();
     
     const [currentUser, setCurrentUser] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
+    
+    const [unlockedParts, setUnlockedParts] = useState(DEFAULT_UNLOCKED_PARTS);
     
     const [presets, setPresets] = useState({
         Default: { ...DEFAULT_LOADOUT }
@@ -142,6 +185,77 @@ function LoadoutScreen() {
     const [renameOldName, setRenameOldName] = useState("");
     const [renameInput, setRenameInput] = useState("");
 
+    // Load unlocked parts from Firebase
+    const loadUnlockedParts = async (user) => {
+        const userName = user.displayName || user.email;
+        try {
+            const docRef = doc(db, 'Roboquest-UnlockedParts', userName);
+            const docSnap = await getDoc(docRef);
+            
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                if (data.unlockedParts) {
+                    const merged = { ...DEFAULT_UNLOCKED_PARTS };
+                    Object.keys(data.unlockedParts).forEach(category => {
+                        merged[category] = [...new Set([...merged[category], ...data.unlockedParts[category]])];
+                    });
+                    setUnlockedParts(merged);
+                }
+            }
+        } catch (error) {
+            console.log("Error loading unlocked parts:", error);
+        }
+    };
+
+    // Load presets and unlocked parts from Firebase
+    const loadPresetsAndParts = async (user) => {
+        const userName = user.displayName || user.email;
+        try {
+            // Load presets
+            const presetsRef = doc(db, 'Roboquest-Loadout', userName);
+            const presetsSnap = await getDoc(presetsRef);
+            
+            if (presetsSnap.exists()) {
+                const data = presetsSnap.data();
+                if (data.presets && typeof data.presets === 'object') {
+                    const loadedPresets = {
+                        Default: data.presets.Default || { ...DEFAULT_LOADOUT },
+                        ...data.presets
+                    };
+                    setPresets(loadedPresets);
+                    
+                    // IMPORTANT: Apply the currently selected preset
+                    if (selectedPreset && loadedPresets[selectedPreset]) {
+                        setLoadout({ ...loadedPresets[selectedPreset] });
+                    } else {
+                        // If selected preset doesn't exist, use Default
+                        setSelectedPreset("Default");
+                        setLoadout({ ...loadedPresets.Default || { ...DEFAULT_LOADOUT } });
+                    }
+                }
+            }
+            
+            // Load unlocked parts
+            await loadUnlockedParts(user);
+        } catch (error) {
+            console.log("Error loading data:", error);
+        }
+    };
+
+    // Save unlocked parts to Firebase
+    const saveUnlockedPartsToFirebase = async (partsToSave, user) => {
+        const userToUse = user || currentUser;
+        if (!userToUse) return;
+        
+        const userName = userToUse.displayName || userToUse.email;
+        try {
+            const docRef = doc(db, 'Roboquest-UnlockedParts', userName);
+            await setDoc(docRef, { unlockedParts: partsToSave }, { merge: true });
+        } catch (error) {
+            console.log("Error saving unlocked parts:", error);
+        }
+    };
+
     // Save presets to Firebase
     const savePresetsToFirebase = async (presetsToSave, user) => {
         const userToUse = user || currentUser;
@@ -156,30 +270,12 @@ function LoadoutScreen() {
         }
     };
 
-    // Load presets from Firebase on mount
+    // Load data on mount
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (user) {
                 setCurrentUser(user);
-                const userName = user.displayName || user.email;
-                try {
-                    const docRef = doc(db, 'Roboquest-Loadout', userName);
-                    const docSnap = await getDoc(docRef);
-                    
-                    if (docSnap.exists()) {
-                        const data = docSnap.data();
-                        if (data.presets && typeof data.presets === 'object') {
-                            const loadedPresets = {
-                                Default: data.presets.Default || { ...DEFAULT_LOADOUT },
-                                ...data.presets
-                            };
-                            setPresets(loadedPresets);
-                            setLoadout(loadedPresets.Default || { ...DEFAULT_LOADOUT });
-                        }
-                    }
-                } catch (error) {
-                    console.log("Error loading presets:", error);
-                }
+                await loadPresetsAndParts(user);
             } else {
                 setCurrentUser(null);
             }
@@ -188,6 +284,13 @@ function LoadoutScreen() {
 
         return () => unsubscribe();
     }, []);
+
+    // Reload when screen is focused
+    useEffect(() => {
+        if (isFocused && currentUser) {
+            loadPresetsAndParts(currentUser);
+        }
+    }, [isFocused, currentUser]);
 
     const getWeaponOffset = () => {
         const weapon = loadout.Weapon;
@@ -216,8 +319,30 @@ function LoadoutScreen() {
         return 0;
     };
 
+    // Check if a specific part is unlocked
+    const isPartUnlocked = (partName) => {
+        const category = partName.includes('Weapon') ? 'Weapon' : 
+                        partName.includes('Chassis') ? 'Chassis' :
+                        partName.includes('Wheels') ? 'Wheels' : 'Engines';
+        
+        return unlockedParts[category]?.includes(partName) || false;
+    };
+
     const handleEquip = (category, partName) => {
-        console.log(`Equipping ${partName} to ${category}`);
+        console.log(`Attempting to equip ${partName} to ${category}`);
+        
+        // Check if part is unlocked
+        if (!isPartUnlocked(partName)) {
+            Alert.alert(
+                "Part Locked 🔒",
+                "This part is locked. Use the camera to scan objects and unlock new parts!",
+                [
+                    { text: "Cancel", style: "cancel" },
+                    { text: "Go to Camera", onPress: () => navigation.navigate('Camera') }
+                ]
+            );
+            return;
+        }
         
         const isAlreadyEquipped = loadout[category] === partName;
         const newLoadout = {
@@ -227,7 +352,7 @@ function LoadoutScreen() {
         
         setLoadout(newLoadout);
         
-        // Auto-save to selected preset (including Default)
+        // When manually changing equipment, update the selected preset
         if (selectedPreset) {
             const newPresets = {
                 ...presets,
@@ -235,6 +360,9 @@ function LoadoutScreen() {
             };
             setPresets(newPresets);
             savePresetsToFirebase(newPresets);
+        } else {
+            // If no preset is selected, clear selection
+            setSelectedPreset(null);
         }
     };
     
@@ -383,12 +511,11 @@ function LoadoutScreen() {
     const equippedEngine = loadout.Engines;
     const equippedWheels = loadout.Wheels;
 
-    // Show loading screen while fetching data
     if (isLoading) {
         return (
             <SafeAreaView style={[styles.safeArea, { justifyContent: 'center', alignItems: 'center' }]}>
                 <ActivityIndicator size="large" color="#007AFF" />
-                <Text style={{ color: '#FFFFFF', fontSize: 16, marginTop: 10 }}>Loading...</Text>
+                <Text style={{ color: '#000', fontSize: 16, marginTop: 10 }}>Loading...</Text>
             </SafeAreaView>
         );
     }
@@ -403,9 +530,7 @@ function LoadoutScreen() {
             </View>
 
             <View style={styles.robotDisplayArea}>
-                
                 <View style={styles.robotStage}>
-                    
                     {equippedWheels && (
                         <Image source={ASSETS.parts[equippedWheels]} style={[styles.robotLayer, { zIndex: 30 }]} resizeMode="contain" />
                     )}
@@ -434,18 +559,9 @@ function LoadoutScreen() {
                     {!loadout.Chassis && !loadout.Engines && !loadout.Wheels && !loadout.Weapon && (
                         <Text style={styles.robotPlaceholder}>[Tap parts below to Equip]</Text>
                     )}
-
                 </View>
             </View>
 
-            <View style={{ padding: 10, backgroundColor: '#000000', margin: 0, borderRadius: 0 }}>
-                <Text style={{ fontSize: 12, fontWeight: 'bold' }}>Equip Info:</Text>
-                <Text style={{ fontSize: 10 }}>Selected Preset: {selectedPreset}</Text>
-                <Text style={{ fontSize: 10 }}>Preset Input: "{presetNameInput}"</Text>
-                <Text style={{ fontSize: 10 }}>Loadout: {JSON.stringify(loadout)}</Text>
-                <Text style={{ fontSize: 10 }}>Preset Count: {Object.keys(presets).length}</Text>
-            </View>
-            
             <View style={styles.presetsContainer}>
                 <Text style={styles.sectionTitle}>Presets</Text>
                 
@@ -541,10 +657,12 @@ function LoadoutScreen() {
                         parts={PART_LISTS[category]}
                         currentLoadout={loadout}
                         onEquip={handleEquip}
+                        unlockedParts={unlockedParts}
                     />
                 ))}
             </ScrollView>
             
+            {/* RENAME MODAL */}
             <Modal
                 visible={renameVisible}
                 transparent
@@ -595,6 +713,7 @@ function LoadoutScreen() {
                 </Pressable>
             </Modal>
 
+            {/* DROPDOWNS */}
             {activeDropdown === 'TypeBox' && (
                 <DropdownModal
                     isVisible={true} onClose={() => setActiveDropdown(null)}
@@ -622,13 +741,31 @@ function LoadoutScreen() {
 }
 
 const styles = StyleSheet.create({
-    safeArea: { flex: 1, backgroundColor: COLORS.WHITE },
-    header: { flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 20, paddingTop: 10, height: 50 },
-    settingsIcon: { width: 30, height: 30, tintColor: COLORS.ACCENT_GREY, resizeMode: 'contain' },
-    robotDisplayArea: { alignItems: 'center', flex: 0.45, justifyContent: 'center', },
+    safeArea: { 
+        flex: 1, 
+        backgroundColor: COLORS.WHITE 
+    },
+    header: { 
+        flexDirection: 'row', 
+        justifyContent: 'flex-end', 
+        paddingHorizontal: 20, 
+        paddingTop: 10, 
+        height: 40,
+    },
+    settingsIcon: { 
+        width: 30, 
+        height: 30, 
+        tintColor: COLORS.ACCENT_GREY, 
+        resizeMode: 'contain' 
+    },
+    robotDisplayArea: { 
+        alignItems: 'center', 
+        flex: 0.4, 
+        justifyContent: 'center' 
+    },
     robotStage: {
-        width: 400,
-        height: 400,
+        width: 350,
+        height: 350,
         justifyContent: 'center',
         alignItems: 'center',
         position: 'relative',
@@ -644,12 +781,19 @@ const styles = StyleSheet.create({
         height: '100%',
         resizeMode: 'contain',
     },
-    robotPlaceholder: { fontSize: 16,},
+    robotPlaceholder: { 
+        fontSize: 16 
+    },
     sectionTitle: { 
         fontSize: 18, 
         fontWeight: 'bold', 
         color: COLORS.DARK_GREY_TEXT, 
         marginBottom: 5 
+    },
+    unlockCount: {
+        fontSize: 12,
+        color: COLORS.LOCKED,
+        fontWeight: 'normal',
     },
     presetsContainer: {
         width: '100%',
@@ -677,30 +821,149 @@ const styles = StyleSheet.create({
         color: 'white',
         fontWeight: 'bold',
     },
-    filterRow: { flexDirection: 'row', justifyContent: 'space-evenly', paddingVertical: 15, backgroundColor: COLORS.LIGHT_GREY, marginBottom: 5, marginTop: 10 },
-    filterBox: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 15, backgroundColor: COLORS.ACCENT_GREY, minWidth: 90, alignItems: 'center' },
-    filterText: { fontSize: 13, fontWeight: '600', color: 'white' },
-    partsArea: { flex: 1, paddingHorizontal: 20 },
-    categorySection: { marginTop: 15, borderBottomWidth: 1, borderBottomColor: '#eee', paddingBottom: 15 },
-    categoryTitle: { fontSize: 18, fontWeight: 'bold', color: COLORS.ACCENT_GREY, marginBottom: 10, textTransform: 'uppercase', letterSpacing: 1 },
-    partRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 10 },
-    partItem: { alignItems: 'center', width: 110, marginBottom: 15 },
+    filterRow: { 
+        flexDirection: 'row', 
+        justifyContent: 'space-evenly', 
+        paddingVertical: 15, 
+        backgroundColor: COLORS.LIGHT_GREY, 
+        marginBottom: 5, 
+        marginTop: 10 
+    },
+    filterBox: { 
+        paddingHorizontal: 12, 
+        paddingVertical: 6, 
+        borderRadius: 15, 
+        backgroundColor: COLORS.ACCENT_GREY, 
+        minWidth: 90, 
+        alignItems: 'center' 
+    },
+    filterText: { 
+        fontSize: 13, 
+        fontWeight: '600', 
+        color: 'white' 
+    },
+    partsArea: { 
+        flex: 1, 
+        paddingHorizontal: 20 
+    },
+    categorySection: { 
+        marginTop: 15, 
+        borderBottomWidth: 1, 
+        borderBottomColor: '#eee', 
+        paddingBottom: 15 
+    },
+    categoryTitle: { 
+        fontSize: 18, 
+        fontWeight: 'bold', 
+        color: COLORS.ACCENT_GREY, 
+        marginBottom: 10, 
+        textTransform: 'uppercase', 
+        letterSpacing: 1 
+    },
+    partRow: { 
+        flexDirection: 'row', 
+        flexWrap: 'wrap', 
+        justifyContent: 'space-between', 
+        gap: 10 
+    },
+    partItem: { 
+        alignItems: 'center', 
+        width: 110, 
+        marginBottom: 15 
+    },
+    lockedPartItem: { 
+        opacity: 0.7 
+    },
     imageContainer: {
-        width: 100, height: 100, backgroundColor: '#f9f9f9', borderRadius: 12, marginBottom: 8,
-        justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: COLORS.LIGHT_GREY,
+        width: 100, 
+        height: 100, 
+        backgroundColor: '#f9f9f9', 
+        borderRadius: 12, 
+        marginBottom: 8,
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        borderWidth: 1, 
+        borderColor: COLORS.LIGHT_GREY,
+        overflow: 'hidden',
+        position: 'relative',
+    },
+    lockedContainer: {
+        backgroundColor: '#e0e0e0',
+        borderColor: COLORS.LOCKED,
+    },
+    lockOverlay: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: 'rgba(0, 0, 0, 0.7)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 5,
+    },
+    lockText: {
+        color: 'white',
+        fontSize: 10,
+        fontWeight: 'bold',
+        marginBottom: 2,
+    },
+    unlockHint: {
+        color: '#FFD700',
+        fontSize: 8,
+        textAlign: 'center',
+    },
+    partImage: { 
+        width: '85%', 
+        height: '85%' 
+    },
+    lockedImage: { 
+        opacity: 0.3 
+    },
+    partLabel: { 
+        fontSize: 12, 
+        fontWeight: '600', 
+        color: COLORS.DARK_GREY_TEXT, 
+        textAlign: 'center' 
+    },
+    lockedText: { 
+        color: COLORS.LOCKED 
     },
     equippedContainer: {
         borderColor: COLORS.SELECTED_BORDER,
         borderWidth: 2,
         backgroundColor: '#E3F2FD',
     },
-    partImage: { width: '85%', height: '85%' },
-    partLabel: { fontSize: 12, fontWeight: '600', color: COLORS.DARK_GREY_TEXT, textAlign: 'center' },
-    equippedText: { color: COLORS.SELECTED_BORDER, fontWeight: '700' },
-    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.2)' },
-    dropdownContainer: { position: 'absolute', width: 140, backgroundColor: 'white', borderRadius: 8, elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 3.84, paddingVertical: 5 },
-    dropdownItem: { paddingVertical: 12, paddingHorizontal: 15, borderBottomWidth: 1, borderBottomColor: '#eee' },
-    dropdownText: { fontSize: 14, color: COLORS.DARK_GREY_TEXT },
+    equippedText: { 
+        color: COLORS.SELECTED_BORDER, 
+        fontWeight: '700' 
+    },
+    modalOverlay: { 
+        flex: 1, 
+        backgroundColor: 'rgba(0,0,0,0.2)' 
+    },
+    dropdownContainer: { 
+        position: 'absolute', 
+        width: 140, 
+        backgroundColor: 'white', 
+        borderRadius: 8, 
+        elevation: 5, 
+        shadowColor: '#000', 
+        shadowOffset: { width: 0, height: 2 }, 
+        shadowOpacity: 0.25, 
+        shadowRadius: 3.84, 
+        paddingVertical: 5 
+    },
+    dropdownItem: { 
+        paddingVertical: 12, 
+        paddingHorizontal: 15, 
+        borderBottomWidth: 1, 
+        borderBottomColor: '#eee' 
+    },
+    dropdownText: { 
+        fontSize: 14, 
+        color: COLORS.DARK_GREY_TEXT 
+    },
 });
 
 export default LoadoutScreen;

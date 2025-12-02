@@ -5,7 +5,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { detectObjectsInImage, analyzeSelectedObject, detectAndAnalyzeMainObject } from './aifunctions/gemini';
-import { auth, db, doc, getDoc, setDoc } from './database/firebase'; // Import Firebase functions
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -27,104 +26,6 @@ const fonts = {
   body: 'System',
 };
 
-// Joshlee code wink - Part unlocking mapping
-const PART_MAPPING = {
-  // Innovare category unlocks Innovare parts
-  'Innovare': {
-    'Weapon': 'WeaponInnovare',
-    'Chassis': 'ChassisInnovare',
-    'Engines': 'EngineInnovare',
-    'Wheels': 'WheelsInnovare',
-  },
-  // Generalis category unlocks Generalis parts
-  'Generalis': {
-    'Weapon': 'WeaponGeneralis',
-    'Chassis': 'ChassisGeneralis',
-    'Engines': 'EngineGeneralis',
-    'Wheels': 'WheelsGeneralis',
-  },
-  // Creativia category unlocks Creativia parts
-  'Creativia': {
-    'Weapon': 'WeaponCreativia',
-    'Chassis': 'ChassisCreativia',
-    'Engines': 'EngineCreativia',
-    'Wheels': 'WheelsCreativia',
-  },
-};
-
-// Joshlee code wink - Function to unlock parts based on detected object
-const unlockPartForUser = async (userId, category) => {
-  try {
-    const userName = userId.displayName || userId.email;
-    
-    // Get current unlocked parts
-    const docRef = doc(db, 'Roboquest-UnlockedParts', userName);
-    const docSnap = await getDoc(docRef);
-    
-    let currentUnlockedParts = {
-      Weapon: ['WeaponGeneralis'], // Default unlocked
-      Chassis: ['ChassisGeneralis'],
-      Wheels: ['WheelsGeneralis'],
-      Engines: ['EngineGeneralis'],
-    };
-    
-    if (docSnap.exists()) {
-      const data = docSnap.data();
-      if (data.unlockedParts) {
-        currentUnlockedParts = data.unlockedParts;
-      }
-    }
-    
-    // Joshlee code wink - Determine which part to unlock based on category
-    let unlockedPart = null;
-    let partType = null;
-    
-    if (PART_MAPPING[category]) {
-      // For simplicity, unlock Weapon first, then Chassis, etc.
-      if (!currentUnlockedParts.Weapon.includes(PART_MAPPING[category].Weapon)) {
-        unlockedPart = PART_MAPPING[category].Weapon;
-        partType = 'Weapon';
-      } else if (!currentUnlockedParts.Chassis.includes(PART_MAPPING[category].Chassis)) {
-        unlockedPart = PART_MAPPING[category].Chassis;
-        partType = 'Chassis';
-      } else if (!currentUnlockedParts.Engines.includes(PART_MAPPING[category].Engines)) {
-        unlockedPart = PART_MAPPING[category].Engines;
-        partType = 'Engines';
-      } else if (!currentUnlockedParts.Wheels.includes(PART_MAPPING[category].Wheels)) {
-        unlockedPart = PART_MAPPING[category].Wheels;
-        partType = 'Wheels';
-      } else {
-        // All parts of this category are already unlocked
-        return { alreadyUnlocked: true, category };
-      }
-      
-      if (unlockedPart && partType) {
-        // Update unlocked parts
-        const updatedUnlockedParts = {
-          ...currentUnlockedParts,
-          [partType]: [...currentUnlockedParts[partType], unlockedPart]
-        };
-        
-        // Save to Firebase
-        await setDoc(docRef, { unlockedParts: updatedUnlockedParts }, { merge: true });
-        
-        return { 
-          success: true, 
-          unlockedPart, 
-          partType, 
-          category,
-          alreadyUnlocked: false 
-        };
-      }
-    }
-    
-    return { success: false, message: 'No parts to unlock for this category' };
-  } catch (error) {
-    console.error('Error unlocking part:', error);
-    return { success: false, message: error.message };
-  }
-};
-
 function ResultScreen() {
   const route = useRoute();
   const navigation = useNavigation();
@@ -135,7 +36,6 @@ function ResultScreen() {
   const [detectionResult, setDetectionResult] = useState(null);
   const [analyzingObject, setAnalyzingObject] = useState(null);
   const [isAutoAnalyzing, setIsAutoAnalyzing] = useState(false);
-  const [unlockResult, setUnlockResult] = useState(null); // Joshlee code wink - Store unlock result
 
   // Animation refs
   const scanLineAnim = useRef(new Animated.Value(0)).current;
@@ -149,25 +49,6 @@ function ResultScreen() {
       scale: new Animated.Value(0),
     }))
   ).current;
-
-  // Joshlee code wink - Handle unlocking parts after detection
-  const handlePartUnlocking = async (category) => {
-    try {
-      // Get current user
-      const user = auth.currentUser;
-      if (!user) {
-        console.log('No user logged in');
-        return null;
-      }
-      
-      const result = await unlockPartForUser(user, category);
-      setUnlockResult(result);
-      return result;
-    } catch (error) {
-      console.error('Error in handlePartUnlocking:', error);
-      return null;
-    }
-  };
 
   // Start animations
   useEffect(() => {
@@ -283,12 +164,6 @@ function ResultScreen() {
 
           // Single mode returns object (singular) and sceneContext
           if (result.object) {
-            // Joshlee code wink - Check category and unlock part if applicable
-            if (result.object.category && ['Innovare', 'Generalis', 'Creativia'].includes(result.object.category)) {
-              const unlockResult = await handlePartUnlocking(result.object.category);
-              console.log('Unlock result:', unlockResult);
-            }
-
             // Show auto-analyzing state
             setIsAutoAnalyzing(true);
 
@@ -304,7 +179,6 @@ function ResultScreen() {
                 the_science_in_action: result.object.the_science_in_action,
                 category: result.object.category,
                 confidence: result.object.confidence,
-                unlockedPart: unlockResult?.unlockedPart || null, // Joshlee code wink - Add unlock info
               };
 
               const existingEntriesJson = await AsyncStorage.getItem('journalPhotos');
@@ -335,7 +209,6 @@ function ResultScreen() {
               category: result.object.category,
               funFact: result.object.funFact,
               the_science_in_action: result.object.the_science_in_action,
-              unlockedPart: unlockResult?.unlockedPart || null, // Joshlee code wink - Add unlock info
             };
 
             // Navigate directly to AnalyzeScreen with pre-analyzed result
@@ -362,16 +235,6 @@ function ResultScreen() {
         if (result.error) {
           setError(result.error);
         } else if (result.objects && result.objects.length > 0) {
-          // Joshlee code wink - Check if any object has unlockable category
-          const unlockableObject = result.objects.find(obj => 
-            obj.category && ['Innovare', 'Generalis', 'Creativia'].includes(obj.category)
-          );
-          
-          if (unlockableObject) {
-            const unlockResult = await handlePartUnlocking(unlockableObject.category);
-            console.log('Batch mode unlock result:', unlockResult);
-          }
-
           // Store detection results in AsyncStorage
           try {
             const detectionData = {
@@ -380,7 +243,6 @@ function ResultScreen() {
               sceneContext: result.sceneContext,
               timestamp: new Date().toISOString(),
               id: Date.now().toString(),
-              unlockedPart: unlockResult?.unlockedPart || null, // Joshlee code wink - Add unlock info
             };
 
             // Get existing detections
@@ -405,7 +267,6 @@ function ResultScreen() {
                 id: Date.now().toString(),
                 uri: imageUri,
                 timestamp: Date.now(),
-                unlockedPart: unlockResult?.unlockedPart || null, // Joshlee code wink - Add unlock info
                 // Analysis fields will be added later in AnalyzeScreen
               };
 
@@ -459,38 +320,6 @@ function ResultScreen() {
     navigation.goBack();
   };
 
-  // Joshlee code wink - Function to handle navigation back to Loadout with unlock message
-  const handleReturnToLoadout = () => {
-    if (unlockResult?.success) {
-      Alert.alert(
-        "🎉 Part Unlocked!",
-        `You've unlocked: ${unlockResult.unlockedPart}\n\nReturn to Loadout to equip it!`,
-        [
-          { 
-            text: 'Back to Loadout', 
-            onPress: () => {
-              navigation.navigate('Loadout', { 
-                newlyUnlockedPart: unlockResult.unlockedPart 
-              });
-            }
-          },
-          {
-            text: 'Continue Exploring',
-            style: 'cancel'
-          }
-        ]
-      );
-    } else if (unlockResult?.alreadyUnlocked) {
-      Alert.alert(
-        "All Parts Unlocked",
-        `You've already unlocked all ${unlockResult.category} parts!`,
-        [{ text: 'OK' }]
-      );
-    } else {
-      navigation.goBack();
-    }
-  };
-
   // Error State
   if (error && !isDetecting) {
     return (
@@ -521,15 +350,6 @@ function ResultScreen() {
           <TouchableOpacity style={styles.retakeButton} onPress={handleRetake}>
             <Ionicons name="camera-outline" size={24} color={colors.background} />
             <Text style={styles.retakeButtonText}>Try Again</Text>
-          </TouchableOpacity>
-          
-          {/* Joshlee code wink - Add option to return to Loadout */}
-          <TouchableOpacity 
-            style={[styles.retakeButton, { backgroundColor: '#4B7BEC', marginTop: 10 }]} 
-            onPress={() => navigation.navigate('Loadout')}
-          >
-            <Ionicons name="hammer-outline" size={24} color={colors.background} />
-            <Text style={styles.retakeButtonText}>Back to Loadout</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -575,14 +395,6 @@ function ResultScreen() {
             <View style={styles.statusTextContainer}>
               <Text style={styles.statusText}>Analyzing Main Object</Text>
               <Text style={styles.subStatusText}>Getting detailed information...</Text>
-              
-              {/* Joshlee code wink - Show unlock status if applicable */}
-              {unlockResult?.success && (
-                <View style={styles.unlockBadge}>
-                  <Ionicons name="unlock-outline" size={16} color={colors.success} />
-                  <Text style={styles.unlockBadgeText}>New Part Unlocked!</Text>
-                </View>
-              )}
             </View>
 
             <View style={styles.progressContainer}>
@@ -616,22 +428,6 @@ function ResultScreen() {
                 Found {detectionResult.objects.length} Object{detectionResult.objects.length > 1 ? 's' : ''}
               </Text>
             </View>
-
-            {/* Joshlee code wink - Show unlock notification if part was unlocked */}
-            {unlockResult?.success && (
-              <View style={styles.unlockNotification}>
-                <View style={styles.unlockNotificationHeader}>
-                  <Ionicons name="trophy-outline" size={24} color="#FFD700" />
-                  <Text style={styles.unlockNotificationTitle}>Part Unlocked!</Text>
-                </View>
-                <Text style={styles.unlockNotificationText}>
-                  You've unlocked: <Text style={styles.unlockPartName}>{unlockResult.unlockedPart}</Text>
-                </Text>
-                <Text style={styles.unlockNotificationHint}>
-                  Return to Loadout to equip your new part!
-                </Text>
-              </View>
-            )}
 
             {detectionResult.sceneContext && (
               <View style={styles.sceneContextCard}>
@@ -744,21 +540,10 @@ function ResultScreen() {
               ))}
             </View>
 
-            {/* Joshlee code wink - Updated back button with Loadout option */}
-            <View style={styles.buttonContainer}>
-              <TouchableOpacity style={styles.backButton} onPress={handleRetake}>
-                <Ionicons name="camera-outline" size={24} color={colors.background} />
-                <Text style={styles.backButtonText}>Back to Camera</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={[styles.backButton, { backgroundColor: '#4B7BEC', marginTop: 10 }]} 
-                onPress={handleReturnToLoadout}
-              >
-                <Ionicons name="hammer-outline" size={24} color={colors.background} />
-                <Text style={styles.backButtonText}>Back to Loadout</Text>
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity style={styles.backButton} onPress={handleRetake}>
+              <Ionicons name="arrow-back" size={24} color={colors.background} />
+              <Text style={styles.backButtonText}>Back to Camera</Text>
+            </TouchableOpacity>
           </ScrollView>
         </View>
       </SafeAreaView>
@@ -920,24 +705,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     opacity: 0.8,
   },
-  unlockBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: 'rgba(0, 170, 0, 0.1)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 12,
-    marginTop: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(0, 170, 0, 0.3)',
-  },
-  unlockBadgeText: {
-    fontFamily: fonts.body,
-    color: colors.success,
-    fontSize: 12,
-    fontWeight: '600',
-  },
   progressContainer: {
     width: '80%',
     alignItems: 'center',
@@ -1054,43 +821,6 @@ const styles = StyleSheet.create({
     fontFamily: fonts.heading,
     color: colors.success,
     fontSize: 24,
-  },
-  // Joshlee code wink - New styles for unlock notification
-  unlockNotification: {
-    backgroundColor: 'rgba(75, 123, 236, 0.1)',
-    borderRadius: 15,
-    padding: 15,
-    marginBottom: 15,
-    borderWidth: 2,
-    borderColor: '#4B7BEC',
-  },
-  unlockNotificationHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginBottom: 8,
-  },
-  unlockNotificationTitle: {
-    fontFamily: fonts.heading,
-    color: '#4B7BEC',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  unlockNotificationText: {
-    fontFamily: fonts.body,
-    color: colors.text,
-    fontSize: 14,
-    marginBottom: 5,
-  },
-  unlockPartName: {
-    color: '#4B7BEC',
-    fontWeight: 'bold',
-  },
-  unlockNotificationHint: {
-    fontFamily: fonts.body,
-    color: colors.lightGray,
-    fontSize: 12,
-    fontStyle: 'italic',
   },
   sceneContextCard: {
     backgroundColor: colors.cardBackground,
@@ -1242,9 +972,6 @@ const styles = StyleSheet.create({
     color: colors.lightGray,
     fontSize: 12,
   },
-  buttonContainer: {
-    width: '100%',
-  },
   backButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1269,3 +996,4 @@ const styles = StyleSheet.create({
 });
 
 export default ResultScreen;
+
