@@ -1,5 +1,15 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, TouchableOpacity, StyleSheet, SafeAreaView, Image, Text, Animated, Dimensions, ImageBackground } from 'react-native'; 
+import { 
+    View, 
+    TouchableOpacity, 
+    StyleSheet, 
+    SafeAreaView, 
+    Image, 
+    Text, 
+    Animated, 
+    Dimensions, 
+    ImageBackground 
+} from 'react-native'; 
 import { useNavigation, useIsFocused } from '@react-navigation/native';
 import { auth, db, doc, getDoc, onAuthStateChanged } from './database/firebase';
 
@@ -14,9 +24,18 @@ const PANEL_DARK_BG = '#2A3439';
 const CIRCLE_BG_COLOR = 'rgba(255, 255, 255, 0.2)'; 
 const ICON_SIZE = 30; 
 const CONTAINER_SIZE = 45; 
-const screenWidth = Dimensions.get('window').width;
-const QUEST_LIST_WIDTH = screenWidth * 0.90; 
-const QUEST_LIST_OFFSET = (screenWidth / 2) - (QUEST_LIST_WIDTH / 2); 
+
+
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const scaleSize = (size) => {
+    const scaleFactor = SCREEN_WIDTH / 375; 
+    return Math.round(size * scaleFactor);
+};
+
+const scaleFont = (size) => {
+    const scaleFactor = SCREEN_WIDTH / 375;
+    return Math.round(size * scaleFactor);
+};
 
 // Icons and Parts
 const ICONS = {
@@ -28,7 +47,8 @@ const ICONS = {
     loadout: require('./assets/icons/loadout.png'), 
     collection: require('./assets/icons/collection.png'),
     journal: require('./assets/icons/journal.png'),       
-    main_menubg: require('./assets/background/MainMenubg.png'), 
+    main_menubg: require('./assets/background/MainMenubgOff.png'), 
+    main_menubg_on: require('./assets/background/MainMenubg.png'), // Added the "on" version
 };
 
 const ASSETS = {
@@ -56,14 +76,15 @@ const DEFAULT_LOADOUT = {
 };
 
 const baseIconStyle = {
-    width: CONTAINER_SIZE,
-    height: CONTAINER_SIZE,
-    borderRadius: CONTAINER_SIZE / 2,
+    width: scaleSize(CONTAINER_SIZE),
+    height: scaleSize(CONTAINER_SIZE),
+    borderRadius: scaleSize(CONTAINER_SIZE) / 2,
     backgroundColor: CIRCLE_BG_COLOR, 
     justifyContent: 'center',
     alignItems: 'center',
 };
 
+// Action Panel Button Component
 const ActionPanelButton = ({ iconSource, label, onPress }) => {
     return (
         <TouchableOpacity 
@@ -80,6 +101,7 @@ const ActionPanelButton = ({ iconSource, label, onPress }) => {
     );
 };
 
+// Camera Screen Button Component
 const CameraScreenButton = ({ navigation }) => {
     return (
         <View style={styles.cameraButtonOuterContainer}>
@@ -91,7 +113,6 @@ const CameraScreenButton = ({ navigation }) => {
             >
                 <View style={styles.cameraAccentTopRight} />
                 <View style={styles.cameraAccentBottomLeft} />
-                {/* NEW ACCENTS */}
                 <View style={styles.cameraAccentTopLeft} />
                 <View style={styles.cameraAccentBottomRight} />
                 
@@ -106,16 +127,19 @@ const CameraScreenButton = ({ navigation }) => {
     );
 };
 
+// Quest List Component
 const QuestList = ({ show, slideAnim, questIconLayout }) => {
     if (!show || !questIconLayout) return null; 
 
-    const topPosition = questIconLayout.y + questIconLayout.height + 5; 
+    const topPosition = questIconLayout.y + questIconLayout.height + scaleSize(5); 
+    const questListWidth = SCREEN_WIDTH * 0.90;
+    const questListOffset = (SCREEN_WIDTH / 2) - (questListWidth / 2);
     
     const animatedStyle = {
         transform: [{
             translateX: slideAnim.interpolate({
                 inputRange: [0, 1],
-                outputRange: [-QUEST_LIST_WIDTH, QUEST_LIST_OFFSET - 20], 
+                outputRange: [-questListWidth, questListOffset - scaleSize(20)], 
             }),
         }],
         top: topPosition,
@@ -125,7 +149,7 @@ const QuestList = ({ show, slideAnim, questIconLayout }) => {
     const QUESTS = ["• Collect 5 Energy Cells", "• Defeat Boss Unit 3", "• Visit the Workshop"];
 
     return (
-        <Animated.View style={[questListStyles.container, animatedStyle, { width: QUEST_LIST_WIDTH }]}>
+        <Animated.View style={[questListStyles.container, animatedStyle, { width: questListWidth }]}>
             {QUESTS.map((quest, index) => (
                 <View key={index} style={questListStyles.item}>
                     <Text style={questListStyles.text}>{quest}</Text> 
@@ -138,36 +162,51 @@ const QuestList = ({ show, slideAnim, questIconLayout }) => {
 // Robot Preview Component
 const RobotPreview = ({ loadout }) => {
     const getWeaponOffset = () => {
-        const weapon = loadout.Weapon;
-        const chassis = loadout.Chassis;
+        const weapon = loadout?.Weapon;
+        const chassis = loadout?.Chassis;
 
         if (!chassis || !weapon) return 0;
 
         if (chassis === "ChassisInnovare") {
-            if (weapon === "WeaponCreativia") return 13;
-            if (weapon === "WeaponGeneralis") return 8;
+            if (weapon === "WeaponCreativia") return scaleSize(13);
+            if (weapon === "WeaponGeneralis") return scaleSize(8);
             if (weapon === "WeaponInnovare") return 0;
         }
 
         if (chassis === "ChassisGeneralis") {
-            if (weapon === "WeaponCreativia") return 6;
+            if (weapon === "WeaponCreativia") return scaleSize(6);
             if (weapon === "WeaponGeneralis") return 0;
-            if (weapon === "WeaponInnovare") return -6;
+            if (weapon === "WeaponInnovare") return scaleSize(-6);
         }
     
         if (chassis === "ChassisCreativia") {
             if (weapon === "WeaponCreativia") return 0;
-            if (weapon === "WeaponGeneralis") return -5;
-            if (weapon === "WeaponInnovare") return -11;
+            if (weapon === "WeaponGeneralis") return scaleSize(-5);
+            if (weapon === "WeaponInnovare") return scaleSize(-11);
         }
 
         return 0;
     };
 
-    const equippedWeapon = loadout.Weapon;
-    const equippedChassis = loadout.Chassis;
-    const equippedEngine = loadout.Engines;
-    const equippedWheels = loadout.Wheels;
+    const equippedWeapon = loadout?.Weapon;
+    const equippedChassis = loadout?.Chassis;
+    const equippedEngine = loadout?.Engines;
+    const equippedWheels = loadout?.Wheels;
+
+    if (!loadout || (!equippedWeapon && !equippedChassis && !equippedEngine && !equippedWheels)) {
+        return (
+            <View style={styles.robotPreviewContainer}>
+                <View style={styles.robotStage}>
+                    <Text style={{ color: LIGHT_BLUE, fontSize: scaleFont(16), textAlign: 'center' }}>
+                        No robot configured
+                    </Text>
+                    <Text style={{ color: LIGHT_GREY, fontSize: scaleFont(12), textAlign: 'center', marginTop: scaleSize(10) }}>
+                        Go to Loadout to customize your robot
+                    </Text>
+                </View>
+            </View>
+        );
+    }
 
     return (
         <View style={styles.robotPreviewContainer}>
@@ -242,6 +281,89 @@ const TopIconButton = ({ iconSource, onPress, isQuest = false, isActive = false,
     );
 };
 
+// Blinking Light Animation Component
+const BlinkingLightAnimation = ({ isVisible }) => {
+    const fadeAnim = useRef(new Animated.Value(0)).current;
+    const [currentBg, setCurrentBg] = useState(ICONS.main_menubg);
+    const intervalRef = useRef(null);
+
+    useEffect(() => {
+        if (isVisible) {
+            const doubleBlinkSequence = () => {
+                Animated.timing(fadeAnim, {
+                    toValue: 1,
+                    duration: 200, 
+                    useNativeDriver: true,
+                }).start(() => {
+                    setCurrentBg(ICONS.main_menubg_on);
+                    
+                    setTimeout(() => {
+                        Animated.timing(fadeAnim, {
+                            toValue: 0,
+                            duration: 100, 
+                            useNativeDriver: true,
+                        }).start(() => {
+                            setCurrentBg(ICONS.main_menubg);
+                            setTimeout(() => {
+                                Animated.timing(fadeAnim, {
+                                    toValue: 1,
+                                    duration: 200, 
+                                    useNativeDriver: true,
+                                }).start(() => {
+                                    setCurrentBg(ICONS.main_menubg_on);
+                                    
+                                    setTimeout(() => {
+                                        Animated.timing(fadeAnim, {
+                                            toValue: 0,
+                                            duration: 100,  
+                                            useNativeDriver: true,
+                                        }).start(() => {
+                                            setCurrentBg(ICONS.main_menubg);
+                                        });
+                                    }, 300);    
+                                });
+                            }, 150); 
+                        });
+                    }, 300);    
+                });
+            };
+
+            doubleBlinkSequence();
+            intervalRef.current = setInterval(doubleBlinkSequence, 3000);
+
+            return () => {
+                if (intervalRef.current) {
+                    clearInterval(intervalRef.current);
+                }
+            };
+        } else {
+            setCurrentBg(ICONS.main_menubg);
+            fadeAnim.setValue(0);
+            if (intervalRef.current) {
+                clearInterval(intervalRef.current);
+            }
+        }
+    }, [isVisible, fadeAnim]);
+
+    return (
+        <Animated.View
+            style={[
+                StyleSheet.absoluteFillObject,
+                {
+                    opacity: fadeAnim,
+                }
+            ]}
+        >
+            <ImageBackground 
+                source={currentBg}
+                style={styles.background}
+                resizeMode="cover"
+            />
+        </Animated.View>
+    );
+};
+
+// Main Menu Screen Component
 function MainMenuScreen() {
     const navigation = useNavigation();
     const isFocused = useIsFocused();
@@ -252,21 +374,42 @@ function MainMenuScreen() {
     const questIconRef = useRef(null);
     const [questIconLayout, setQuestIconLayout] = useState(null);
 
-    // Load current loadout from Firebase
     const loadCurrentLoadout = async (user) => {
         try {
-            const userName = user.displayName || user.email;
-            const presetsRef = doc(db, 'Roboquest-Loadout', userName);
+            const userId = user.uid;
+            const presetsRef = doc(db, 'Roboquest-Loadout', userId);
             const presetsSnap = await getDoc(presetsRef);
             
             if (presetsSnap.exists()) {
                 const data = presetsSnap.data();
-                if (data.presets && data.presets.Default) {
-                    setCurrentLoadout(data.presets.Default);
+                
+                if (data.presets && typeof data.presets === 'object') {
+                    if (data.equippedPreset && data.presets[data.equippedPreset]) {
+                        setCurrentLoadout(data.presets[data.equippedPreset]);
+                    } 
+                    else if (data.selectedPreset && data.presets[data.selectedPreset]) {
+                        setCurrentLoadout(data.presets[data.selectedPreset]);
+                    }
+                    else if (data.presets.Default) {
+                        setCurrentLoadout(data.presets.Default);
+                    }
+                    else if (Object.keys(data.presets).length > 0) {
+                        const firstPresetName = Object.keys(data.presets)[0];
+                        setCurrentLoadout(data.presets[firstPresetName]);
+                    }
+                    else {
+                        setCurrentLoadout(DEFAULT_LOADOUT);
+                    }
+                } else {
+                    setCurrentLoadout(DEFAULT_LOADOUT);
                 }
+            } else {
+                setCurrentLoadout(DEFAULT_LOADOUT);
             }
+            
         } catch (error) {
             console.log("Error loading loadout for main menu:", error);
+            setCurrentLoadout(DEFAULT_LOADOUT);
         }
     };
 
@@ -281,7 +424,6 @@ function MainMenuScreen() {
         return () => unsubscribe();
     }, []);
 
-    // Reload loadout when screen is focused
     useEffect(() => {
         if (isFocused && currentUser) {
             loadCurrentLoadout(currentUser);
@@ -324,93 +466,106 @@ function MainMenuScreen() {
                 questIconLayout={questIconLayout}
             />
 
+            {/* Base Background (always visible) */}
             <ImageBackground 
                 source={ICONS.main_menubg}
                 style={styles.background}
                 resizeMode="cover"
             >
+                {/* Blinking Light Animation Overlay */}
+                <BlinkingLightAnimation isVisible={isFocused} />
                 
-                {/* Top Navigation Bar - Fixed Positioning */}
-                <View style={styles.topNavBar}>
-                    <View style={styles.topNavLeft}>
-                        <TopIconButton 
-                            iconSource={ICONS.quest}
-                            onPress={toggleQuestList}
-                            isQuest={true}
-                            isActive={showQuestList}
-                            refProp={questIconRef}
+                {/* Content Layer */}
+                <View style={styles.contentContainer}>
+                    
+                    {/* Top Navigation Bar - Fixed Positioning */}
+                    <View style={styles.topNavBar}>
+                        <View style={styles.topNavLeft}>
+                            <TopIconButton 
+                                iconSource={ICONS.quest}
+                                onPress={toggleQuestList}
+                                isQuest={true}
+                                isActive={showQuestList}
+                                refProp={questIconRef}
+                            />
+                        </View>
+                        
+                        <View style={styles.topNavRight}>
+                            <TopIconButton 
+                                iconSource={ICONS.shop}
+                                onPress={() => navigation.navigate('Shop')}
+                            />
+                            <TopIconButton 
+                                iconSource={ICONS.settings}
+                                onPress={() => navigation.navigate('Settings')}
+                            />
+                        </View>
+                    </View>
+                    
+                    {/* Robot Preview in Center */}
+                    <View style={styles.centerContent}>
+                        <RobotPreview 
+                            loadout={currentLoadout} 
+                        />
+                    </View>
+
+                    <View style={styles.actionButtonsContainer}>
+                        <ActionPanelButton 
+                            iconSource={ICONS.battle} 
+                            label="BATTLE MODE" 
+                            onPress={() => navigation.navigate('Battle')} 
+                        />
+                        <ActionPanelButton 
+                            iconSource={ICONS.loadout} 
+                            label="WORKSHOP LOADOUT" 
+                            onPress={() => navigation.navigate('Loadout')} 
                         />
                     </View>
                     
-                    <View style={styles.topNavRight}>
-                        <TopIconButton 
-                            iconSource={ICONS.shop}
-                            onPress={() => navigation.navigate('Shop')}
+                    <CameraScreenButton navigation={navigation} />
+                    
+                    <View style={styles.bottomActionButtonsContainer}>
+                        <ActionPanelButton 
+                            iconSource={ICONS.collection} 
+                            label="PARTS COLLECTION" 
+                            onPress={() => navigation.navigate('Collection')} 
                         />
-                        <TopIconButton 
-                            iconSource={ICONS.settings}
-                            onPress={() => navigation.navigate('Settings')}
+                        <ActionPanelButton 
+                            iconSource={ICONS.journal} 
+                            label="JOURNAL LOG" 
+                            onPress={() => navigation.navigate('Journal')} 
                         />
                     </View>
-                </View>
-                
-                {/* Robot Preview in Center */}
-                <View style={styles.centerContent}>
-                    <RobotPreview loadout={currentLoadout} />
-                </View>
 
-                <View style={styles.actionButtonsContainer}>
-                    <ActionPanelButton 
-                        iconSource={ICONS.battle} 
-                        label="BATTLE MODE" 
-                        onPress={() => navigation.navigate('Battle')} 
-                    />
-                    <ActionPanelButton 
-                        iconSource={ICONS.loadout} 
-                        label="WORKSHOP LOADOUT" 
-                        onPress={() => navigation.navigate('Loadout')} 
-                    />
                 </View>
-                <CameraScreenButton navigation={navigation} />
-                <View style={styles.bottomActionButtonsContainer}>
-                    <ActionPanelButton 
-                        iconSource={ICONS.collection} 
-                        label="PARTS COLLECTION" 
-                        onPress={() => navigation.navigate('Collection')} 
-                    />
-                    <ActionPanelButton 
-                        iconSource={ICONS.journal} 
-                        label="JOURNAL LOG" 
-                        onPress={() => navigation.navigate('Journal')} 
-                    />
-                </View>
-
             </ImageBackground>
         </SafeAreaView>
     );
 }
+
+// Quest List Styles
 const questListStyles = StyleSheet.create({
     container: {
         position: 'absolute',
         backgroundColor: PANEL_DARK_BG,
-        borderRadius: 8,
-        padding: 10,
+        borderRadius: scaleSize(8),
+        padding: scaleSize(10),
         zIndex: 50, 
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
+        shadowOffset: { width: 0, height: scaleSize(2) },
         shadowOpacity: 0.5,
-        shadowRadius: 5,
+        shadowRadius: scaleSize(5),
         elevation: 10,
     },
     item: {
-        paddingVertical: 8,
-        paddingHorizontal: 5,
+        paddingVertical: scaleSize(8),
+        paddingHorizontal: scaleSize(5),
         borderBottomWidth: 1,
         borderBottomColor: ACCENT_GREY,
     },
     text: {
         color: LIGHT_GREY,
-        fontSize: 16,
+        fontSize: scaleFont(16),
         fontWeight: '600',
         textAlign: 'left',
     },
@@ -425,20 +580,26 @@ const styles = StyleSheet.create({
         flex: 1,
         width: '100%',
         height: '100%',
+    },
+    contentContainer: {
+        flex: 1,
+        width: '100%',
+        height: '90%',
         justifyContent: 'space-between',
-        paddingVertical: 30,
+        paddingVertical: scaleSize(-1),
     },
     
-    // TOP NAVIGATION BAR - Clean Layout
+    // TOP NAVIGATION BAR 
     topNavBar: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        paddingHorizontal: 20,
-        paddingTop: 15,
-        paddingBottom: 10,
-        backgroundColor: 'rgba(0, 0, 0, 0.3)', // Slight background for contrast
+        paddingHorizontal: scaleSize(20),
+        paddingTop: scaleSize(15),
+        paddingBottom: scaleSize(10),
+        backgroundColor: 'rgba(0, 0, 0, 0.3)',
         width: '100%',
+        zIndex: 10, 
     },
     topNavLeft: {
         flex: 1,
@@ -448,42 +609,32 @@ const styles = StyleSheet.create({
         flex: 1,
         flexDirection: 'row',
         justifyContent: 'flex-end',
-        gap: 20,
+        gap: scaleSize(20),
     },
     topIconButton: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
+        width: scaleSize(48),
+        height: scaleSize(48),
+        borderRadius: scaleSize(24),
         backgroundColor: 'rgba(255, 255, 255, 0.1)',
         justifyContent: 'center',
         alignItems: 'center',
         borderWidth: 1,
         borderColor: 'rgba(255, 255, 255, 0.2)',
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
+        shadowOffset: { width: 0, height: scaleSize(2) },
         shadowOpacity: 0.2,
-        shadowRadius: 3,
+        shadowRadius: scaleSize(3),
         elevation: 3,
+        zIndex: 10,
     },
     topIconButtonActive: {
         backgroundColor: 'rgba(0, 191, 255, 0.2)',
         borderColor: LIGHT_BLUE,
     },
     topIconImage: {
-        width: 24,
-        height: 24,
+        width: scaleSize(24),
+        height: scaleSize(24),
         tintColor: LIGHT_BLUE,
-    },
-    
-    // REMOVED OLD FLOATING ICONS STYLES
-    floatingIconsLayer: {
-        display: 'none',
-    },
-    topLeftIcons: {
-        display: 'none',
-    },
-    floatingIcon: {
-        display: 'none',
     },
     
     // Center Content for Robot
@@ -491,26 +642,23 @@ const styles = StyleSheet.create({
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        marginTop: -30, // Pull robot up slightly
+        marginTop: scaleSize(-30),
+        zIndex: 10,
     },
     
     // Robot Preview Styles
     robotPreviewContainer: {
         alignItems: 'center',
         justifyContent: 'center',
-        marginBottom: -30,
-    },
-    robotPreviewTitle: {
-        fontSize: 14,
-        fontWeight: 'bold',
-        color: LIGHT_BLUE,
-        marginBottom: 10,
-        textAlign: 'center',
-        letterSpacing: 1,
+        marginBottom: scaleSize(-100),
+        zIndex: 10,
+        position: 'relative',
     },
     robotStage: {
-        width: 540, 
-        height: 500,
+        width: SCREEN_WIDTH * 0.8,
+        height: SCREEN_WIDTH * 0.8,
+        maxWidth: scaleSize(350),
+        maxHeight: scaleSize(350),
         justifyContent: 'center',
         alignItems: 'center',
         position: 'relative',
@@ -530,100 +678,107 @@ const styles = StyleSheet.create({
     // Action Buttons
     actionButtonsContainer: {
         flexDirection: 'row',
-        justifyContent: 'space-around', 
-        width: screenWidth * 1,
+        justifyContent: 'space-around',
+        width: '80%',
         alignSelf: 'center',
-        marginBottom: 1,
+        marginBottom: scaleSize(1),
+        paddingHorizontal: scaleSize(.1),
+        zIndex: 10,
     },
     bottomActionButtonsContainer: { 
         flexDirection: 'row',
-        justifyContent: 'space-around', 
-        width: screenWidth * 1.2,
+        justifyContent: 'space-around',
+        width: '110%',
         alignSelf: 'center',
-        marginBottom: 105, 
+        marginBottom: scaleSize(90),
+        paddingHorizontal: scaleSize(.1),
+        zIndex: 10,
     },
     actionButton: {
-        width: screenWidth * 0.3, 
-        height: 60, 
-        borderRadius: 15, 
-        backgroundColor: Transparent_BG, 
+        width: SCREEN_WIDTH * 0.30,
+        height: scaleSize(35),
+        borderRadius: scaleSize(20),
+        backgroundColor: Transparent_BG,
         justifyContent: 'center',
         alignItems: 'center',
     },
     actionIcon: {
-        width: 30, 
-        height: 30,
-        tintColor: LIGHT_BLUE, 
-        marginBottom: 3, 
+        width: scaleSize(30),
+        height: scaleSize(30),
+        tintColor: LIGHT_BLUE,
+        marginBottom: scaleSize(3),
     },
     actionLabel: {
-        fontSize: 8, 
+        fontSize: scaleFont(9),
         fontWeight: 'bold',
-        color: LIGHT_BLUE, 
+        color: LIGHT_BLUE,
+        textAlign: 'center',
     },
     
     // Camera Button Styles
     cameraButtonOuterContainer: {
         alignItems: 'center',
-        marginBottom: 1,
+        marginBottom: scaleSize(.2),
+        marginTop: scaleSize(10),
+        zIndex: 10,
     },
     cameraButton: {
-        width: screenWidth * 0.4,
-        height: 50,        
-        backgroundColor: Transparent_BG, 
+        width: SCREEN_WIDTH * 0.3,
+        height: scaleSize(55),
+        backgroundColor: Transparent_BG,
         justifyContent: 'center',
         alignItems: 'center',
-        position: 'relative', 
-        overflow: 'hidden', 
+        position: 'relative',
+        overflow: 'hidden',
     },
     cameraIcon: {
-        width: 35,  
-        height: 35, 
-        tintColor: LIGHT_BLUE, 
-        marginBottom: 2, 
-        zIndex: 10, 
+        width: scaleSize(35),
+        height: scaleSize(35),
+        tintColor: LIGHT_BLUE,
+        marginBottom: scaleSize(1),
+        zIndex: 10,
     },
     cameraLabel: {
-        fontSize: 8, 
+        fontSize: scaleFont(9),
         fontWeight: 'bold',
-        color: LIGHT_BLUE, 
-        zIndex: 10, 
+        color: LIGHT_BLUE,
+        zIndex: 10,
     },
     
     // Camera Accents (Line Borders)
     cameraAccentTopRight: {
         position: 'absolute',
-        bottom: 0, 
-        left: 0, 
-        width: 20, 
-        height: 20, 
-        backgroundColor: Transparent_BG, 
-        borderBottomWidth: 3, 
-        borderLeftWidth: 3,   
-        borderColor: Indent_Color, 
-        zIndex: 1, 
+        bottom: 0,
+        left: 0,
+        width: scaleSize(20),
+        height: scaleSize(20),
+        backgroundColor: Transparent_BG,
+        borderBottomWidth: scaleSize(3),
+        borderLeftWidth: scaleSize(3),
+        borderColor: Indent_Color,
+        zIndex: 1,
     },
     cameraAccentBottomLeft: {
         position: 'absolute',
         top: 0,
-        right: 0, 
-        width: 20, 
-        height: 20, 
-        backgroundColor: Transparent_BG, 
-        borderTopWidth: 3,  
-        borderRightWidth: 3, 
-        borderColor: Indent_Color, 
-        zIndex: 1, 
+        right: 0,
+        width: scaleSize(20),
+        height: scaleSize(20),
+        backgroundColor: Transparent_BG,
+        borderTopWidth: scaleSize(3),
+        borderRightWidth: scaleSize(3),
+        borderColor: Indent_Color,
+        zIndex: 1,
     },
     cameraAccentTopLeft: {
         position: 'absolute',
         bottom: 0,
         right: 0,
-        width: 20,
-        height: 20,
+        width: scaleSize(20),
+        height: scaleSize(20),
         backgroundColor: Transparent_BG,
-        borderBottomWidth: 3,
-        borderRightWidth: 3, 
+        borderBottomWidth: scaleSize(3),
+        borderRightWidth: scaleSize(3),
         borderColor: Indent_Color,
         zIndex: 1,
     },
@@ -631,11 +786,11 @@ const styles = StyleSheet.create({
         position: 'absolute',
         top: 0,
         left: 0,
-        width: 20,
-        height: 20,
+        width: scaleSize(20),
+        height: scaleSize(20),
         backgroundColor: Transparent_BG,
-        borderTopWidth: 3,
-        borderLeftWidth: 3,
+        borderTopWidth: scaleSize(3),
+        borderLeftWidth: scaleSize(3),
         borderColor: Indent_Color,
         zIndex: 1,
     },
