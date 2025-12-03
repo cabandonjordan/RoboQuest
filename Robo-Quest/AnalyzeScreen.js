@@ -718,7 +718,10 @@ export default function AnalyzeScreen() {
           setShowResultModal(false);
           setAwardedPart(null); // Reset awarded part when closing modal
           // Navigate back to Camera screen
-          navigation.navigate('Camera');
+          navigation.reset({
+            index: 0,
+            routes: [{ name: 'Home' }],
+          });
         }}
       >
         <View style={styles.modalOverlay}>
