@@ -6,6 +6,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
+import { useLayoutEffect } from 'react';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -38,7 +39,10 @@ function CameraScreen() {
   const [flash, setFlash] = useState('off');
   const [isScanning, setIsScanning] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
+  const [cameraMode, setCameraMode] = useState('single'); // 'single' or 'batch'
   const cameraRef = useRef(null);
+
+  
 
   // Animation values
   const scanLineAnim = useRef(new Animated.Value(0)).current;
@@ -50,6 +54,7 @@ function CameraScreen() {
 
   // Start animations
   useEffect(() => {
+    
     // Scanning line animation
     Animated.loop(
       Animated.sequence([
@@ -119,11 +124,26 @@ function CameraScreen() {
       )
     );
     cornerSequence.start();
+    
 
     return () => {
       setPhoto(null);
     };
   }, []);
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', (e) => {
+      // Only intercept if we're not already navigating to Home
+      if (navigation.isFocused() && e.data.action.type !== 'RESET') {
+        e.preventDefault();
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'Home' }],
+        });
+      }
+    });
+    return unsubscribe;
+  }, [navigation]);
 
   const scanLineTranslateY = scanLineAnim.interpolate({
     inputRange: [0, 1],
@@ -226,7 +246,7 @@ function CameraScreen() {
 
     // Navigate to ResultScreen with the image URI
     // ResultScreen will handle the object detection and saving
-    navigation.navigate('Result', { imageUri: photo.uri });
+    navigation.navigate('Result', { imageUri: photo.uri, cameraMode });
   };
 
   const toggleCameraFacing = () => {
@@ -255,6 +275,50 @@ function CameraScreen() {
               >
                 <Ionicons name="camera-reverse-outline" size={22} color={colors.text} />
               </TouchableOpacity>
+
+                {/* Mode Selector in CENTER */}
+                <View style={styles.modeSelector}>
+                <TouchableOpacity
+                  style={[
+                    styles.modeButton,
+                    cameraMode === 'single' && styles.modeButtonActive
+                  ]}
+                  onPress={() => setCameraMode('single')}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons 
+                    name="scan" 
+                    size={16} 
+                    color={cameraMode === 'single' ? colors.background : colors.lightGray} 
+                  />
+                  <Text style={[
+                    styles.modeButtonText,
+                    cameraMode === 'single' && styles.modeButtonTextActive
+                  ]}>
+                    Single
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.modeButton,
+                    cameraMode === 'batch' && styles.modeButtonActive
+                  ]}
+                  onPress={() => setCameraMode('batch')}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons 
+                    name="grid-outline" 
+                    size={16} 
+                    color={cameraMode === 'batch' ? colors.background : colors.lightGray} 
+                  />
+                  <Text style={[
+                    styles.modeButtonText,
+                    cameraMode === 'batch' && styles.modeButtonTextActive
+                  ]}>
+                    Batch
+                  </Text>
+                </TouchableOpacity>
+              </View>
 
               {/* Flash on RIGHT */}
               <TouchableOpacity
@@ -633,6 +697,37 @@ const styles = StyleSheet.create({
   controlButtonActive: {
     backgroundColor: colors.primary,
     borderColor: colors.primary,
+  },
+  modeSelector: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(13, 15, 24, 0.85)',
+    borderRadius: 20,
+    padding: 3,
+    borderWidth: 1.5,
+    borderColor: 'rgba(0, 191, 255, 0.25)',
+    gap: 4,
+  },
+  modeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    minWidth: 70,
+  },
+  modeButtonActive: {
+    backgroundColor: colors.primary,
+  },
+  modeButtonText: {
+    fontFamily: fonts.body,
+    fontSize: 12,
+    color: colors.lightGray,
+    fontWeight: '600',
+  },
+  modeButtonTextActive: {
+    color: colors.background,
   },
   reticle: {
     position: 'absolute',

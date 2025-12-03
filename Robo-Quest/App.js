@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import { LogBox } from 'react-native';
 
 // Import all screen components
 import LoadingScreen from './LoadingScreen';
@@ -18,6 +19,9 @@ import LoadoutScreen from './LoadoutScreen';
 import ResultScreen from './ResultScreen';
 import AnalyzeScreen from './AnalyzeScreen';
 
+LogBox.ignoreLogs([
+  'Text strings must be rendered within a <Text> component',
+]);
 // 🛠️ DEV MODE TOGGLE - Set to false for production
 const DEV_MODE = false; // Change to true to enable dev screen selector
 // Only import DevScreen if file exists (won't crash in production)
