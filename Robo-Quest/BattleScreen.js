@@ -1,12 +1,104 @@
-import React from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Image, SafeAreaView } from "react-native";
+import React, { useState, useEffect } from "react";
+import { View, Text, StyleSheet, TouchableOpacity, Image, SafeAreaView, ActivityIndicator } from "react-native";
+import { auth, db, doc, getDoc, onAuthStateChanged } from './database/firebase';
 
 const BATTLE = {
-  player: require("./assets/battle/player.png"),
   enemy: require("./assets/battle/enemy.png"),
 };
 
+const ASSETS = {
+  parts: {
+    ChassisCreativia: require('./assets/parts/chassis/ChassisCreativia.png'),
+    ChassisGeneralis: require('./assets/parts/chassis/ChassisGeneralis.png'),
+    ChassisInnovare: require('./assets/parts/chassis/ChassisInnovare.png'),
+    EngineCreativia: require('./assets/parts/engines/EngineCreativia.png'),
+    EngineGeneralis: require('./assets/parts/engines/EngineGeneralis.png'),
+    EngineInnovare: require('./assets/parts/engines/EngineInnovare.png'),
+    WeaponCreativia: require('./assets/parts/weapons/WeaponCreativia.png'),
+    WeaponGeneralis: require('./assets/parts/weapons/WeaponGeneralis.png'),
+    WeaponInnovare: require('./assets/parts/weapons/WeaponInnovare.png'),
+    WheelsCreativia: require('./assets/parts/wheels/WheelsCreativia.png'),
+    WheelsGeneralis: require('./assets/parts/wheels/WheelsGeneralis.png'),
+    WheelsInnovare: require('./assets/parts/wheels/WheelsInnovare.png'),
+  }
+};
+
+const DEFAULT_LOADOUT = {
+  Chassis: 'ChassisGeneralis',
+  Engines: 'EngineGeneralis',
+  Wheels: 'WheelsGeneralis',
+  Weapon: 'WeaponGeneralis'
+};
+
 function BattleScreen() {
+  const [loadout, setLoadout] = useState(DEFAULT_LOADOUT);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        const userName = user.displayName || user.email;
+        try {
+          const docRef = doc(db, 'Roboquest-Loadout', userName);
+          const docSnap = await getDoc(docRef);
+          
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            if (data.presets && data.presets.Default) {
+              setLoadout(data.presets.Default);
+            }
+          }
+        } catch (error) {
+          console.log("Error loading loadout:", error);
+        }
+      }
+      setIsLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  const getWeaponOffset = () => {
+    const weapon = loadout.Weapon;
+    const chassis = loadout.Chassis;
+
+    if (!chassis || !weapon) return 0;
+
+    if (chassis === "ChassisInnovare") {
+      if (weapon === "WeaponCreativia") return 8;
+      if (weapon === "WeaponGeneralis") return 5;
+      if (weapon === "WeaponInnovare") return 0;
+    }
+
+    if (chassis === "ChassisGeneralis") {
+      if (weapon === "WeaponCreativia") return 4;
+      if (weapon === "WeaponGeneralis") return 0;
+      if (weapon === "WeaponInnovare") return -4;
+    }
+
+    if (chassis === "ChassisCreativia") {
+      if (weapon === "WeaponCreativia") return 0;
+      if (weapon === "WeaponGeneralis") return -3;
+      if (weapon === "WeaponInnovare") return -7;
+    }
+
+    return 0;
+  };
+
+  if (isLoading) {
+    return (
+      <SafeAreaView style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color="#5CB85C" />
+        <Text style={{ marginTop: 10, color: '#444' }}>Loading Battle...</Text>
+      </SafeAreaView>
+    );
+  }
+
+  const equippedWeapon = loadout.Weapon;
+  const equippedChassis = loadout.Chassis;
+  const equippedEngine = loadout.Engines;
+  const equippedWheels = loadout.Wheels;
+
   return (
     <SafeAreaView style={styles.container}>
 
@@ -19,9 +111,38 @@ function BattleScreen() {
         <Text style={styles.healthLabel}>Enemy</Text>
       </View>
 
-      {/* PLAYER (Bottom Left above skills) */}
+      {/* PLAYER (Bottom Left above skills) - Using equipped loadout */}
       <View style={styles.playerContainer}>
-        <Image source={BATTLE.player} style={styles.playerImg} />
+        <View style={styles.robotStage}>
+          {equippedWheels && ASSETS.parts[equippedWheels] && (
+            <Image 
+              source={ASSETS.parts[equippedWheels]} 
+              style={[styles.robotLayer, { zIndex: 30 }]} 
+              resizeMode="contain" 
+            />
+          )}
+          {equippedChassis && ASSETS.parts[equippedChassis] && (
+            <Image 
+              source={ASSETS.parts[equippedChassis]} 
+              style={[styles.robotLayer, { zIndex: 10 }]} 
+              resizeMode="contain" 
+            />
+          )}
+          {equippedEngine && ASSETS.parts[equippedEngine] && (
+            <Image 
+              source={ASSETS.parts[equippedEngine]} 
+              style={[styles.robotLayer, { zIndex: 20 }]} 
+              resizeMode="contain" 
+            />
+          )}
+          {equippedWeapon && ASSETS.parts[equippedWeapon] && (
+            <Image 
+              source={ASSETS.parts[equippedWeapon]} 
+              style={[styles.robotLayer, { zIndex: 40, top: getWeaponOffset() }]} 
+              resizeMode="contain" 
+            />
+          )}
+        </View>
         <View style={styles.healthBar}>
           <View style={[styles.healthFill, { width: "90%" }]} />
         </View>
@@ -79,6 +200,19 @@ const styles = StyleSheet.create({
     position: "absolute",
     bottom: 240,
     left: 25,
+  },
+  robotStage: {
+    width: 150,
+    height: 150,
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+    marginBottom: 6,
+  },
+  robotLayer: {
+    position: 'absolute',
+    width: '100%',
+    height: '100%',
   },
   playerImg: {
     width: 150,
