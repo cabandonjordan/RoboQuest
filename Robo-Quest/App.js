@@ -1,9 +1,10 @@
 // App.js
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { LogBox } from 'react-native';
+import BackgroundMusicManager from './services/BackgroundMusicManager';
 
 // Import all screen components
 import LoadingScreen from './LoadingScreen';
@@ -38,6 +39,23 @@ const Stack = createNativeStackNavigator();
 
 function App() {
   const [isLoading, setIsLoading] = useState(true);
+  const [currentScreen, setCurrentScreen] = useState('');
+
+  // Initialize background music when app starts
+  useEffect(() => {
+    BackgroundMusicManager.initializeMusic();
+    
+    // Cleanup on unmount
+    return () => {
+      BackgroundMusicManager.unloadMusic();
+    };
+  }, []);
+
+  // Handle loading finish and start music
+  const handleLoadingFinish = () => {
+    setIsLoading(false);
+    BackgroundMusicManager.playMusic();
+  };
 
   // 🛠️ If in dev mode and DevScreen exists, show it
   if (DEV_MODE && DevScreen) {
@@ -46,11 +64,28 @@ function App() {
 
   // Show loading screen while assets are loading
   if (isLoading) {
-    return <LoadingScreen onFinish={() => setIsLoading(false)} />;
+    return <LoadingScreen onFinish={handleLoadingFinish} />;
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer
+      onStateChange={(state) => {
+        // Get current route name
+        const route = state?.routes[state.index];
+        const routeName = route?.name;
+        
+        if (routeName) {
+          setCurrentScreen(routeName);
+          
+          // Pause music on Battle screen, play on all others
+          if (routeName === 'Battle') {
+            BackgroundMusicManager.pauseMusic();
+          } else {
+            BackgroundMusicManager.playMusic();
+          }
+        }
+      }}
+    >
       <Stack.Navigator initialRouteName="LoginScreen">
         
         {/* Title Screen - First screen after loading */}
