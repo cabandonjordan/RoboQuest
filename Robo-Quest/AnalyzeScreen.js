@@ -3,7 +3,6 @@ import { View, Text, StyleSheet, Image, TouchableOpacity, Dimensions, ActivityIn
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Speech from 'expo-speech';
 import { analyzeSelectedObject } from './aifunctions/gemini';
 import { auth, db, doc, setDoc, getDoc, onAuthStateChanged } from './database/firebase';
@@ -110,6 +109,47 @@ async function savePartToCollection(partName, userId) {
   }
 }
 
+// Function to save journal entry to Firebase
+async function saveJournalEntryToFirebase(entry, userId) {
+  if (!userId || !entry) {
+    console.log('Cannot save journal entry: missing userId or entry');
+    return false;
+  }
+
+  try {
+    const userDocRef = doc(db, 'Roboquest-Journal-Entry', userId);
+    const userDoc = await getDoc(userDocRef);
+    
+    let entries = [];
+    if (userDoc.exists()) {
+      const data = userDoc.data();
+      entries = data.entries || [];
+    }
+    
+    // Check if this image already exists in journal
+    const existingIndex = entries.findIndex(e => e.uri === entry.uri);
+    
+    if (existingIndex >= 0) {
+      // Update existing entry with analysis results
+      entries[existingIndex] = {
+        ...entries[existingIndex],
+        ...entry,
+        id: entries[existingIndex].id, // Keep original ID
+      };
+    } else {
+      // Add new entry at the beginning
+      entries.unshift(entry);
+    }
+    
+    await setDoc(userDocRef, { entries }, { merge: true });
+    console.log('✓ Saved journal entry to Firebase');
+    return true;
+  } catch (error) {
+    console.error('❌ Error saving journal entry to Firebase:', error);
+    return false;
+  }
+}
+
 export default function AnalyzeScreen() {
   const route = useRoute();
   const navigation = useNavigation();
@@ -204,12 +244,12 @@ export default function AnalyzeScreen() {
         }
       })();
 
-      // Save to journal with analysis results
+      // Save to journal with analysis results (Firebase)
       (async () => {
         try {
-          // Check if AsyncStorage is available
-          if (!AsyncStorage || typeof AsyncStorage.getItem !== 'function') {
-            console.error('AsyncStorage is not properly imported or available');
+          const currentUser = auth.currentUser;
+          if (!currentUser) {
+            console.log('No user logged in, journal entry not saved');
             return;
           }
 
@@ -225,27 +265,7 @@ export default function AnalyzeScreen() {
             confidence: safeResult.confidence,
           };
 
-          // Get existing journal entries
-          const existingEntriesJson = await AsyncStorage.getItem('journalPhotos');
-          const existingEntries = existingEntriesJson ? JSON.parse(existingEntriesJson) : [];
-
-          // Check if this image already exists in journal
-          const existingIndex = existingEntries.findIndex(entry => entry.uri === imageUri);
-          
-          if (existingIndex >= 0) {
-            // Update existing entry with analysis results
-            existingEntries[existingIndex] = {
-              ...existingEntries[existingIndex],
-              ...journalEntry,
-              id: existingEntries[existingIndex].id, // Keep original ID
-            };
-          } else {
-            // Add new entry
-            existingEntries.unshift(journalEntry);
-          }
-
-          // Save back to storage
-          await AsyncStorage.setItem('journalPhotos', JSON.stringify(existingEntries));
+          await saveJournalEntryToFirebase(journalEntry, currentUser.uid);
           console.log('✓ Saved journal entry with analysis results (from preAnalyzedResult)');
         } catch (storageError) {
           console.error('❌ Error saving journal entry:', storageError);
@@ -369,48 +389,27 @@ export default function AnalyzeScreen() {
         // Don't block the UI if part awarding fails
       }
 
-      // Save to journal with analysis results
+      // Save to journal with analysis results (Firebase)
       try {
-        // Check if AsyncStorage is available
-        if (!AsyncStorage || typeof AsyncStorage.getItem !== 'function') {
-          console.error('AsyncStorage is not properly imported or available');
-          return;
-        }
-
-        const journalEntry = {
-          id: Date.now().toString(),
-          uri: imageUri,
-          timestamp: Date.now(),
-          selectedObject: safeResult.objectName,
-          description: safeResult.objectName, // Using object name as description
-          funFact: safeResult.funFact,
-          the_science_in_action: safeResult.the_science_in_action,
-          category: safeResult.category,
-          confidence: safeResult.confidence,
-        };
-
-        // Get existing journal entries
-        const existingEntriesJson = await AsyncStorage.getItem('journalPhotos');
-        const existingEntries = existingEntriesJson ? JSON.parse(existingEntriesJson) : [];
-
-        // Check if this image already exists in journal
-        const existingIndex = existingEntries.findIndex(entry => entry.uri === imageUri);
-        
-        if (existingIndex >= 0) {
-          // Update existing entry with analysis results
-          existingEntries[existingIndex] = {
-            ...existingEntries[existingIndex],
-            ...journalEntry,
-            id: existingEntries[existingIndex].id, // Keep original ID
-          };
+        const currentUser = auth.currentUser;
+        if (!currentUser) {
+          console.log('No user logged in, journal entry not saved');
         } else {
-          // Add new entry
-          existingEntries.unshift(journalEntry);
-        }
+          const journalEntry = {
+            id: Date.now().toString(),
+            uri: imageUri,
+            timestamp: Date.now(),
+            selectedObject: safeResult.objectName,
+            description: safeResult.objectName, // Using object name as description
+            funFact: safeResult.funFact,
+            the_science_in_action: safeResult.the_science_in_action,
+            category: safeResult.category,
+            confidence: safeResult.confidence,
+          };
 
-        // Save back to storage
-        await AsyncStorage.setItem('journalPhotos', JSON.stringify(existingEntries));
-        console.log('✓ Saved journal entry with analysis results');
+          await saveJournalEntryToFirebase(journalEntry, currentUser.uid);
+          console.log('✓ Saved journal entry with analysis results');
+        }
       } catch (storageError) {
         console.error('❌ Error saving journal entry:', storageError);
         // Don't show error to user, just log it

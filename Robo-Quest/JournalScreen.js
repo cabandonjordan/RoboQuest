@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, Alert, Modal, ScrollView, Animated, Dimensions } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, Alert, Modal, ScrollView, Animated, Dimensions, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import * as Speech from 'expo-speech';
+import { auth, db, doc, getDoc, setDoc, onAuthStateChanged } from './database/firebase';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -32,26 +32,59 @@ function JournalScreen() {
   const [selectedPhoto, setSelectedPhoto] = useState(null);
   const [currentPage, setCurrentPage] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [currentUser, setCurrentUser] = useState(null);
   const scrollX = React.useRef(new Animated.Value(0)).current;
   const speechRef = useRef(null);
 
-  useFocusEffect(
-    React.useCallback(() => {
-      loadPhotos();
-    }, [])
-  );
+  // Load journal entries from Firebase
+  const loadPhotos = async (user) => {
+    if (!user) {
+      setPhotos([]);
+      setIsLoading(false);
+      return;
+    }
 
-  const loadPhotos = async () => {
     try {
-      const photosJson = await AsyncStorage.getItem('journalPhotos');
-      if (photosJson) {
-        const parsedPhotos = JSON.parse(photosJson);
-        setPhotos(parsedPhotos);
+      const userId = user.uid;
+      const userDocRef = doc(db, 'Roboquest-Journal-Entry', userId);
+      const userDoc = await getDoc(userDocRef);
+      
+      if (userDoc.exists()) {
+        const data = userDoc.data();
+        const journalEntries = data.entries || [];
+        // Sort by timestamp (newest first)
+        journalEntries.sort((a, b) => b.timestamp - a.timestamp);
+        setPhotos(journalEntries);
+      } else {
+        setPhotos([]);
       }
     } catch (error) {
-      console.error('Error loading photos:', error);
+      console.error('❌ Error loading journal entries:', error);
+      setPhotos([]);
+    } finally {
+      setIsLoading(false);
     }
   };
+
+  // Listen for auth state changes and load photos
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setCurrentUser(user);
+      loadPhotos(user);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // Reload photos when screen is focused
+  useFocusEffect(
+    useCallback(() => {
+      if (currentUser) {
+        loadPhotos(currentUser);
+      }
+    }, [currentUser])
+  );
 
   const deletePhoto = async (photoId) => {
     Alert.alert(
@@ -63,10 +96,18 @@ function JournalScreen() {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
+            if (!currentUser) {
+              Alert.alert('Error', 'You must be logged in to delete photos.');
+              return;
+            }
+            
             try {
               const updatedPhotos = photos.filter((photo) => photo.id !== photoId);
-              await AsyncStorage.setItem('journalPhotos', JSON.stringify(updatedPhotos));
+              const userId = currentUser.uid;
+              const userDocRef = doc(db, 'Roboquest-Journal-Entry', userId);
+              await setDoc(userDocRef, { entries: updatedPhotos }, { merge: true });
               setPhotos(updatedPhotos);
+              console.log('✓ Journal entry deleted from Firebase');
             } catch (error) {
               console.error('Error deleting photo:', error);
               Alert.alert('Error', 'Failed to delete photo.');
@@ -212,6 +253,17 @@ function JournalScreen() {
       </View>
     </View>
   );
+
+  if (isLoading) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Loading journal...</Text>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -381,6 +433,17 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f0f0f0',
     paddingTop: 16,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16,
+  },
+  loadingText: {
+    fontFamily: fonts.body,
+    fontSize: 16,
+    color: colors.lightGray,
   },
   title: {
     fontSize: 28,
