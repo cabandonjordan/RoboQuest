@@ -728,8 +728,11 @@ function LoadoutScreen() {
             
             if (docSnap.exists()) {
                 const data = docSnap.data();
-                const existingPresets = data.presets || {};
+                const existingPresets = { ...(data.presets || {}) };
+                
+                // Remove the preset from the object
                 delete existingPresets[presetName];
+                
                 let updatedEquippedPreset = data.equippedPreset || "Default";
                 if (updatedEquippedPreset === presetName) {
                     updatedEquippedPreset = "Default";
@@ -740,14 +743,16 @@ function LoadoutScreen() {
                     updatedSelectedPreset = "Default";
                 }
                 
+                // Overwrite the entire document to ensure preset is deleted
                 await setDoc(docRef, { 
                     presets: existingPresets,
                     equippedPreset: updatedEquippedPreset,
                     selectedPreset: updatedSelectedPreset
-                }, { merge: true });
+                });
                 
                 return true;
             }
+            return false;
         } catch (error) {
             console.log("Error deleting preset from Firebase:", error);
             return false;
