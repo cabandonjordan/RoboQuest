@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
     View, 
     Text, 
@@ -12,7 +12,10 @@ import {
     TextInput, 
     Alert, 
     ActivityIndicator,
-    Dimensions 
+    Dimensions,
+    ImageBackground,
+    Animated,
+    Easing
 } from 'react-native';
 import { useNavigation, useIsFocused } from '@react-navigation/native';
 import { auth, db, doc, setDoc, getDoc, onAuthStateChanged, collection, query, where, getDocs } from './database/firebase';
@@ -29,16 +32,38 @@ const scaleFont = (size) => {
     return Math.round(size * scaleFactor);
 };
 
+const GRAY_PALETTE = {
+    DARK_GRAY: '#1a1a1a',
+    MEDIUM_DARK_GRAY: '#2d2d2d',
+    MEDIUM_GRAY: '#3d3d3d',
+    LIGHT_DARK_GRAY: '#4d4d4d',
+    ACCENT_GRAY: '#5d5d5d',
+    LIGHT_GRAY: '#6d6d6d',
+    VERY_LIGHT_GRAY: '#8d8d8d',
+    OFF_WHITE: '#f5f5f5',
+    WHITE: '#ffffff',
+    BLUE_ACCENT: '#007AFF',
+    GREEN_ACCENT: '#34C759',
+    GOLD: '#FFD700',
+    ORANGE: '#FFA500',
+};
+
 const COLORS = {
-    ACCENT_GREY: '#5B676D',
-    LIGHT_GREY: '#AAA9AD',
-    DARK_GREY_TEXT: '#1F262A',
-    ICON_TINT: '#848689',
-    WHITE: '#FFFFFF',
-    SELECTED_BORDER: '#007AFF',
-    LOCKED: '#888888',
-    PRIMARY: '#4B7BEC',
-    EQUIP_GREEN: '#34C759', 
+    BACKGROUND: GRAY_PALETTE.DARK_GRAY,
+    CARD_BG: GRAY_PALETTE.MEDIUM_DARK_GRAY,
+    TEXT_PRIMARY: GRAY_PALETTE.OFF_WHITE,
+    TEXT_SECONDARY: GRAY_PALETTE.VERY_LIGHT_GRAY,
+    TEXT_MUTED: GRAY_PALETTE.LIGHT_GRAY,
+    BORDER: GRAY_PALETTE.MEDIUM_GRAY,
+    ACCENT: GRAY_PALETTE.ACCENT_GRAY,
+    BUTTON_BG: GRAY_PALETTE.LIGHT_DARK_GRAY,
+    SELECTED_BORDER: GRAY_PALETTE.BLUE_ACCENT,
+    LOCKED: GRAY_PALETTE.LIGHT_GRAY,
+    PRIMARY: GRAY_PALETTE.BLUE_ACCENT,
+    EQUIP_GREEN: GRAY_PALETTE.GREEN_ACCENT,
+    SPARK_GOLD: GRAY_PALETTE.GOLD,
+    SPARK_ORANGE: GRAY_PALETTE.ORANGE,
+    WHITE: GRAY_PALETTE.WHITE,
 };
 
 const ASSETS = {
@@ -60,20 +85,23 @@ const ASSETS = {
         WheelsCreativia: require('./assets/parts/wheels/WheelsCreativia.png'),
         WheelsGeneralis: require('./assets/parts/wheels/WheelsGeneralis.png'),
         WheelsInnovare: require('./assets/parts/wheels/WheelsInnovare.png'),
+    },
+    backgrounds: {
+        loadout: require('./assets/background/Loadoutbg.png'),
     }
 };
 
 const PART_LISTS = {
-    Weapon: ['WeaponCreativia', 'WeaponGeneralis', 'WeaponInnovare'],
-    Chassis: ['ChassisCreativia', 'ChassisGeneralis', 'ChassisInnovare'],
-    Wheels: ['WheelsCreativia', 'WheelsGeneralis', 'WheelsInnovare'],
-    Engines: ['EngineCreativia', 'EngineGeneralis', 'EngineInnovare'],
+    Weapon: ['WeaponGeneralis', 'WeaponInnovare', 'WeaponCreativia'],
+    Chassis: ['ChassisGeneralis', 'ChassisInnovare', 'ChassisCreativia'],
+    Wheels: ['WheelsGeneralis', 'WheelsInnovare', 'WheelsCreativia'],
+    Engines: ['EngineGeneralis', 'EngineInnovare', 'EngineCreativia'],
 };
 
 const DROPDOWN_OPTIONS = {
     TierBox: ['Common', 'Rare', 'Legendary'],
     PartBox: ['All', 'Wheels', 'Engines', 'Chassis', 'Weapon'],
-    TypeBox: ['Innovare', 'General', 'Creative', 'Engineer'],
+    TypeBox: ['All', 'Creativia', 'Generalis', 'Innovare'],
 };
 
 const DEFAULT_LOADOUT = {
@@ -89,7 +117,340 @@ const DEFAULT_UNLOCKED_PARTS = {
     Wheels: ['WheelsGeneralis'],
     Engines: ['EngineGeneralis'],
 };
+const PART_STATS = {
+    WeaponCreativia: {
+        name: 'Laser Spread',
+        type: 'Weapon',
+        brand: 'Creativia',
+        stats: [
+            '1. Laser Blast: Standard Attack. (50 dmg, cost 3 EN)',
+            '2. Overdrive Cascade: (180 dmg, cost 11 EN)'
+        ]
+    },
+    WeaponGeneralis: {
+        name: 'Twin Anti-Air Guns',
+        type: 'Weapon',
+        brand: 'Generalis',
+        stats: [
+            '1. Burst Fire: Standard Attack. (50 dmg, cost 3 EN)',
+            '2. Suppressive Fire: Higher Damage (100 dmg, cost 5 EN)'
+        ]
+    },
+    WeaponInnovare: {
+        name: 'Missile Launcher Arrays',
+        type: 'Weapon',
+        brand: 'Innovare',
+        stats: [
+            '1. Offensive Launch: Standard Attack. (70 dmg, cost 3 EN)',
+            '2. Counter-Measure Launch: Negates next enemy projectile attack. cost 5 EN'
+        ]
+    },
+    
+    ChassisCreativia: {
+        name: 'Creativia Chassis',
+        type: 'Chassis',
+        brand: 'Creativia',
+        stats: [
+            '1. Base HP: 500',
+            '2. ATK Multiplier: 1.3×',
+            'Ability - Invisibility Cloak: Grants 60% Miss Chance for enemies for 3 Turns',
+            'Cost: 13 EN'
+        ]
+    },
+    ChassisGeneralis: {
+        name: 'Generalis Chassis',
+        type: 'Chassis',
+        brand: 'Generalis',
+        stats: [
+            '1. Base HP: 650',
+            '2. ATK Multiplier: 1.0×',
+            'Ability - System Overclock: Increases the robot\'s EN Regen by +5 for the next 3 turns',
+            'Cost: 5 EN'
+        ]
+    },
+    ChassisInnovare: {
+        name: 'Innovare Chassis',
+        type: 'Chassis',
+        brand: 'Innovare',
+        stats: [
+            '1. Base HP: 750',
+            '2. ATK Multiplier: 1.2×',
+            'Ability - Shield Generation: Generates a temporary Shield equal to 30% Max HP',
+            'Cost: 5 EN'
+        ]
+    },
+    
+    EngineCreativia: {
+        name: 'Arc Reactor',
+        type: 'Engine',
+        brand: 'Creativia',
+        stats: [
+            '1. HP Multiplier: 0.9×',
+            '2. EN Regen Adder: +8 Units'
+        ]
+    },
+    EngineGeneralis: {
+        name: 'V12 Engine',
+        type: 'Engine',
+        brand: 'Generalis',
+        stats: [
+            '1. HP Multiplier: 1.2×',
+            '2. EN Regen Adder: +4 Units'
+        ]
+    },
+    EngineInnovare: {
+        name: 'Transformer/Tesla',
+        type: 'Engine',
+        brand: 'Innovare',
+        stats: [
+            '1. HP Multiplier: 1.0×',
+            '2. EN Regen Adder: +6 Units'
+        ]
+    },
+    
+    WheelsCreativia: {
+        name: 'Mech Legs',
+        type: 'Wheels',
+        brand: 'Creativia',
+        stats: [
+            '1. HP Multiplier: 1.3×',
+            '2. EN Regen Adder: −1 Unit',
+            'Passive: 90% chance to negate enemy "immobilize" (attack guarantee) debuff',
+            'Heal Debuff: 5%'
+        ]
+    },
+    WheelsGeneralis: {
+        name: 'Normal Tires',
+        type: 'Wheels',
+        brand: 'Generalis',
+        stats: [
+            '1. HP Multiplier: 1.0×',
+            '2. EN Regen Adder: +2 Units',
+            'Passive: 10% chance to completely negate any damage taken from a Standard Attack',
+            'Heal Debuff: none'
+        ]
+    },
+    WheelsInnovare: {
+        name: 'Tracks',
+        type: 'Wheels',
+        brand: 'Innovare',
+        stats: [
+            '1. HP Multiplier: 1.2×',
+            '2. EN Regen Adder: +0 Units',
+            'Passive: 50% chance to negate enemy "immobilize" (attack guarantee) debuff',
+            'Heal Debuff: 2%'
+        ]
+    }
+};
+const SparkAnimation = ({ 
+    isActive = false, 
+    size = 40, 
+    color = COLORS.SPARK_GOLD, 
+    count = 8, 
+    duration = 1000,
+    style = {} 
+}) => {
+    const animValues = useRef([]);
+    const scales = useRef([]);
+    const rotations = useRef([]);
+    const opacities = useRef([]);
 
+    useEffect(() => {
+        animValues.current = Array(count).fill(0).map(() => new Animated.Value(0));
+        scales.current = Array(count).fill(0).map(() => new Animated.Value(0.5));
+        rotations.current = Array(count).fill(0).map(() => new Animated.Value(0));
+        opacities.current = Array(count).fill(0).map(() => new Animated.Value(0));
+    }, [count]);
+
+    useEffect(() => {
+        if (isActive) {
+            startAnimation();
+        }
+    }, [isActive]);
+
+    const startAnimation = () => {
+        animValues.current.forEach(anim => anim.setValue(0));
+        scales.current.forEach(scale => scale.setValue(0.5));
+        rotations.current.forEach(rotation => rotation.setValue(0));
+        opacities.current.forEach(opacity => opacity.setValue(0));
+        const animations = animValues.current.map((anim, index) => {
+            const delay = index * (duration / count / 3);
+            
+            return Animated.parallel([
+                Animated.timing(anim, {
+                    toValue: 1,
+                    duration: duration,
+                    delay,
+                    easing: Easing.out(Easing.cubic),
+                    useNativeDriver: true,
+                }),
+                Animated.sequence([
+                    Animated.timing(scales.current[index], {
+                        toValue: 1,
+                        duration: duration * 0.3,
+                        delay,
+                        easing: Easing.out(Easing.back(1.2)),
+                        useNativeDriver: true,
+                    }),
+                    Animated.timing(scales.current[index], {
+                        toValue: 0.2,
+                        duration: duration * 0.7,
+                        delay: delay + duration * 0.3,
+                        easing: Easing.in(Easing.cubic),
+                        useNativeDriver: true,
+                    }),
+                ]),
+                Animated.timing(rotations.current[index], {
+                    toValue: 1,
+                    duration: duration * 1.5,
+                    delay,
+                    easing: Easing.linear,
+                    useNativeDriver: true,
+                }),
+                Animated.sequence([
+                    Animated.timing(opacities.current[index], {
+                        toValue: 1,
+                        duration: duration * 0.2,
+                        delay,
+                        useNativeDriver: true,
+                    }),
+                    Animated.timing(opacities.current[index], {
+                        toValue: 0,
+                        duration: duration * 0.8,
+                        delay: delay + duration * 0.2,
+                        useNativeDriver: true,
+                    }),
+                ]),
+            ]);
+        });
+
+        Animated.parallel(animations).start();
+    };
+
+    const getSparkPosition = (index) => {
+        const angle = (index / count) * Math.PI * 2;
+        const radius = size * 1.2;
+        
+        return {
+            left: radius * Math.cos(angle),
+            top: radius * Math.sin(angle),
+        };
+    };
+
+    const renderSparks = () => {
+        return animValues.current.map((anim, index) => {
+            const position = getSparkPosition(index);
+            
+            const translateX = anim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0, position.left],
+            });
+            
+            const translateY = anim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0, position.top],
+            });
+            
+            const scale = scales.current[index].interpolate({
+                inputRange: [0, 1],
+                outputRange: [0.5, 1],
+            });
+            
+            const rotate = rotations.current[index].interpolate({
+                inputRange: [0, 1],
+                outputRange: ['0deg', '720deg'],
+            });
+
+            const opacity = opacities.current[index];
+
+            return (
+                <Animated.View
+                    key={index}
+                    style={[
+                        styles.sparkElement,
+                        {
+                            backgroundColor: color,
+                            opacity: opacity,
+                            width: size / 4,
+                            height: size / 4,
+                            borderRadius: size / 8,
+                            transform: [
+                                { translateX },
+                                { translateY },
+                                { scale },
+                                { rotate },
+                            ],
+                        },
+                    ]}
+                />
+            );
+        });
+    };
+
+    return (
+        <View style={[styles.sparkContainer, { width: size * 2.5, height: size * 2.5 }, style]}>
+            {renderSparks()}
+            {isActive && (
+                <Animated.View
+                    style={[
+                        styles.centerGlow,
+                        {
+                            backgroundColor: color,
+                            width: size * 0.8,
+                            height: size * 0.8,
+                            borderRadius: size * 0.4,
+                            opacity: opacities.current[0] || 0,
+                        },
+                    ]}
+                />
+            )}
+        </View>
+    );
+};
+const PartStatsModal = ({ isVisible, onClose, partData }) => {
+    if (!partData) return null;
+
+    const partInfo = PART_STATS[partData.partName] || {
+        name: partData.partName,
+        type: partData.category,
+        brand: 'Unknown',
+        stats: ['No stats available']
+    };
+
+    return (
+        <Modal
+            animationType="fade"
+            transparent={true}
+            visible={isVisible}
+            onRequestClose={onClose}
+        >
+            <Pressable style={styles.statsModalOverlay} onPress={onClose}>
+                <Pressable style={styles.statsModalContainer} onPress={(e) => e.stopPropagation()}>
+                    <View style={styles.statsModalHeader}>
+                        <Text style={styles.statsModalTitle}>{partInfo.name}</Text>
+                        <Text style={styles.statsModalSubtitle}>
+                            {partInfo.brand} • {partInfo.type}
+                        </Text>
+                    </View>
+                    
+                    <ScrollView style={styles.statsContent}>
+                        {partInfo.stats.map((stat, index) => (
+                            <View key={index} style={styles.statItem}>
+                                <Text style={styles.statText}>{stat}</Text>
+                            </View>
+                        ))}
+                    </ScrollView>
+                    
+                    <View style={styles.statsModalFooter}>
+                        <TouchableOpacity style={styles.statsCloseButton} onPress={onClose}>
+                            <Text style={styles.statsCloseButtonText}>Close</Text>
+                        </TouchableOpacity>
+                    </View>
+                </Pressable>
+            </Pressable>
+        </Modal>
+    );
+};
 const DropdownModal = ({ isVisible, onClose, options, onSelect, positionStyle }) => (
     <Modal animationType="fade" transparent={true} visible={isVisible} onRequestClose={onClose}>
         <Pressable style={styles.modalOverlay} onPress={onClose}>
@@ -110,16 +471,45 @@ const FilterBox = ({ label, value, onPress }) => (
     </TouchableOpacity>
 );
 
-const PartAppearanceItem = ({ label, isEquipped, onEquip, isUnlocked }) => {
+const PartAppearanceItem = ({ label, isEquipped, onEquip, isUnlocked, onLongPress }) => {
+    const [showTapSpark, setShowTapSpark] = useState(false);
+    const tapSparkOpacity = useRef(new Animated.Value(0)).current;
     const imageSource = ASSETS.parts[label];
+    const partInfo = PART_STATS[label] || { name: label };
+    const displayName = partInfo.name || label;
+    
+    const handlePress = () => {
+        if (isUnlocked) {
+            setShowTapSpark(true);
+            Animated.sequence([
+                Animated.timing(tapSparkOpacity, {
+                    toValue: 1,
+                    duration: 100,
+                    useNativeDriver: true,
+                }),
+                Animated.timing(tapSparkOpacity, {
+                    toValue: 0,
+                    duration: 200,
+                    useNativeDriver: true,
+                }),
+            ]).start(() => {
+                setShowTapSpark(false);
+            });
+            
+            onEquip(label);
+        }
+    };
+
     if (!imageSource) return null;
 
     return (
         <TouchableOpacity 
             style={[styles.partItem, !isUnlocked && styles.lockedPartItem]} 
-            onPress={() => isUnlocked && onEquip(label)}
+            onPress={handlePress}
+            onLongPress={() => isUnlocked && onLongPress && onLongPress(label)}
             activeOpacity={isUnlocked ? 0.7 : 1}
             disabled={!isUnlocked}
+            delayLongPress={500}
         >
             <View style={[
                 styles.imageContainer, 
@@ -131,6 +521,15 @@ const PartAppearanceItem = ({ label, isEquipped, onEquip, isUnlocked }) => {
                     style={[styles.partImage, !isUnlocked && styles.lockedImage]}
                     resizeMode="contain"
                 />
+                {showTapSpark && (
+                    <Animated.View style={[
+                        styles.miniSparkContainer,
+                        { opacity: tapSparkOpacity }
+                    ]}>
+                        <View style={[styles.miniSpark, { backgroundColor: isEquipped ? COLORS.EQUIP_GREEN : COLORS.SPARK_GOLD }]} />
+                    </Animated.View>
+                )}
+                
                 {!isUnlocked && (
                     <View style={styles.lockOverlay}>
                         <Image 
@@ -147,19 +546,23 @@ const PartAppearanceItem = ({ label, isEquipped, onEquip, isUnlocked }) => {
                 isEquipped && styles.equippedText,
                 !isUnlocked && styles.lockedText
             ]}>
-                {label}
+                {displayName}
             </Text>
         </TouchableOpacity>
     );
 };
 
-const CategorySection = ({ title, parts, currentLoadout, onEquip, unlockedParts }) => {
+const CategorySection = ({ title, parts, currentLoadout, onEquip, unlockedParts, selectedType, onPartLongPress }) => {
     const isPartEquipped = (partName) => {
         return Object.values(currentLoadout).includes(partName);
     };
 
     const unlockedCount = unlockedParts[title]?.length || 0;
     const totalCount = parts.length;
+    const filteredParts = parts.filter(partName => {
+        if (selectedType === 'All') return true;
+        return partName.includes(selectedType);
+    });
 
     return (
         <View style={styles.categorySection}>
@@ -170,13 +573,14 @@ const CategorySection = ({ title, parts, currentLoadout, onEquip, unlockedParts 
                 </Text>
             </Text>
             <View style={styles.partRow}>
-                {parts.map((partName) => (
+                {filteredParts.map((partName) => (
                     <PartAppearanceItem 
                         key={partName} 
                         label={partName} 
                         isEquipped={isPartEquipped(partName)}
                         isUnlocked={unlockedParts[title]?.includes(partName) || false}
                         onEquip={() => onEquip(title, partName)}
+                        onLongPress={() => onPartLongPress(title, partName)}
                     />
                 ))}
             </View>
@@ -227,13 +631,8 @@ const PresetNavigation = ({
             </TouchableOpacity>
             
             <View style={styles.presetDisplay}>
-                {/* Preset Name - Made smaller */}
                 <Text style={styles.presetName}>{selectedPreset}</Text>
-                
-                {/* Parts Count - Made smaller */}
                 <Text style={styles.presetPartsCount}>{partsCount} part{partsCount !== 1 ? 's' : ''} equipped</Text>
-                
-                {/* Buttons Row - Made smaller - UPDATED with Equip button */}
                 <View style={styles.presetActions}>
                     <TouchableOpacity 
                         style={styles.presetActionButton}
@@ -242,7 +641,6 @@ const PresetNavigation = ({
                         <Text style={styles.presetActionText}>Rename</Text>
                     </TouchableOpacity>
                     
-                    {/* NEW: Equip Button in the center */}
                     <TouchableOpacity 
                         style={[
                             styles.presetActionButton, 
@@ -269,8 +667,6 @@ const PresetNavigation = ({
                         </TouchableOpacity>
                     )}
                 </View>
-                
-                {/* Dots Indicator - Made smaller */}
                 <View style={styles.presetIndicator}>
                     {presetNames.map((name, index) => (
                         <View 
@@ -299,31 +695,64 @@ const PresetNavigation = ({
 function LoadoutScreen() {
     const navigation = useNavigation();
     const isFocused = useIsFocused();
-    
     const [currentUser, setCurrentUser] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
-    
     const [unlockedParts, setUnlockedParts] = useState(DEFAULT_UNLOCKED_PARTS);
-    
     const [presets, setPresets] = useState({
         Default: { ...DEFAULT_LOADOUT }
     });
     
-    const [selectedType, setSelectedType] = useState('Innovare');
+    const [selectedType, setSelectedType] = useState('All');
     const [selectedTier, setSelectedTier] = useState('Rare');
     const [selectedPartFilter, setSelectedPartFilter] = useState('All');
-    const [activeDropdown, setActiveDropdown] = useState(null); 
-
+    const [activeDropdown, setActiveDropdown] = useState(null);
     const [loadout, setLoadout] = useState({ ...DEFAULT_LOADOUT }); 
     const [selectedPreset, setSelectedPreset] = useState("Default"); 
-
     const [presetNameInput, setPresetNameInput] = useState("");
-    
     const [renameVisible, setRenameVisible] = useState(false);
     const [renameOldName, setRenameOldName] = useState("");
     const [renameInput, setRenameInput] = useState("");
-
     const [equippedPreset, setEquippedPreset] = useState("Default");
+    const [showEquipSpark, setShowEquipSpark] = useState(false);
+    const [showPresetSpark, setShowPresetSpark] = useState(false);
+    const [showPartStats, setShowPartStats] = useState(false);
+    const [selectedPartData, setSelectedPartData] = useState(null);
+    const deletePresetFromFirebase = async (presetName, user) => {
+        const userToUse = user || currentUser;
+        if (!userToUse) return false;
+        
+        const userName = userToUse.uid;
+        try {
+            const docRef = doc(db, 'Roboquest-Loadout', userName);
+            const docSnap = await getDoc(docRef);
+            
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                const existingPresets = data.presets || {};
+                delete existingPresets[presetName];
+                let updatedEquippedPreset = data.equippedPreset || "Default";
+                if (updatedEquippedPreset === presetName) {
+                    updatedEquippedPreset = "Default";
+                }
+                
+                let updatedSelectedPreset = data.selectedPreset || "Default";
+                if (updatedSelectedPreset === presetName) {
+                    updatedSelectedPreset = "Default";
+                }
+                
+                await setDoc(docRef, { 
+                    presets: existingPresets,
+                    equippedPreset: updatedEquippedPreset,
+                    selectedPreset: updatedSelectedPreset
+                }, { merge: true });
+                
+                return true;
+            }
+        } catch (error) {
+            console.log("Error deleting preset from Firebase:", error);
+            return false;
+        }
+    };
 
     const loadUnlockedParts = async (user) => {
         if (!user) {
@@ -496,6 +925,42 @@ function LoadoutScreen() {
         }
     }, [isFocused, currentUser]);
 
+    // Spark effect functions
+    const triggerEquipSpark = () => {
+        setShowEquipSpark(true);
+        setTimeout(() => {
+            setShowEquipSpark(false);
+        }, 1000);
+    };
+
+    const triggerPresetSpark = () => {
+        setShowPresetSpark(true);
+        setTimeout(() => {
+            setShowPresetSpark(false);
+        }, 1000);
+    };
+
+    // Part long press handler
+    const handlePartLongPress = (category, partName) => {
+        if (!isPartUnlocked(partName)) {
+            Alert.alert(
+                "Part Locked 🔒",
+                `"${partName}" is not unlocked yet.\n\nScan objects in the Camera to unlock new parts, then check your Collection.`,
+                [
+                    { text: "OK", style: "cancel" },
+                    { text: "Go to Collection", onPress: () => navigation.navigate('Collection') }
+                ]
+            );
+            return;
+        }
+        
+        setSelectedPartData({
+            partName,
+            category
+        });
+        setShowPartStats(true);
+    };
+
     const getWeaponOffset = () => {
         const weapon = loadout.Weapon;
         const chassis = loadout.Chassis;
@@ -504,14 +969,14 @@ function LoadoutScreen() {
 
         if (chassis === "ChassisInnovare") {
             if (weapon === "WeaponCreativia") return scaleSize(13);
-            if (weapon === "WeaponGeneralis") return scaleSize(8);
-            if (weapon === "WeaponInnovare") return 0;
+            if (weapon === "WeaponGeneralis") return scaleSize(4);
+            if (weapon === "WeaponInnovare") return scaleSize(-4);;
         }
 
         if (chassis === "ChassisGeneralis") {
             if (weapon === "WeaponCreativia") return scaleSize(6);
-            if (weapon === "WeaponGeneralis") return 0;
-            if (weapon === "WeaponInnovare") return scaleSize(-6);
+            if (weapon === "WeaponGeneralis") return scaleSize(-2);;
+            if (weapon === "WeaponInnovare") return scaleSize(-11);
         }
     
         if (chassis === "ChassisCreativia") {
@@ -551,6 +1016,9 @@ function LoadoutScreen() {
         };
         
         setLoadout(newLoadout);
+        if (!isAlreadyEquipped) {
+            triggerEquipSpark();
+        }
         
         if (selectedPreset) {
             const newPresets = {
@@ -568,7 +1036,6 @@ function LoadoutScreen() {
         if (presets[name]) {
             setSelectedPreset(name);
             setLoadout({ ...presets[name] });
-            
             savePresetsToFirebase(presets, currentUser);
         }
     };
@@ -580,9 +1047,11 @@ function LoadoutScreen() {
         }
         
         setEquippedPreset(presetName);
-        
         setLoadout({ ...presets[presetName] });
         setSelectedPreset(presetName);
+        
+        // Trigger spark effect
+        triggerPresetSpark();
         
         savePresetsToFirebase(presets, currentUser);
         
@@ -627,9 +1096,7 @@ function LoadoutScreen() {
                             setPresets(newPresets);
                             setSelectedPreset(name); 
                             setPresetNameInput("");
-                            
                             savePresetsToFirebase(newPresets, currentUser);
-                            
                             Alert.alert("Success", `Preset "${name}" saved!`);
                         }
                     }
@@ -650,7 +1117,7 @@ function LoadoutScreen() {
         Alert.alert("Success", `Preset "${name}" saved!`);
     };
 
-    const deletePreset = (presetName) => {
+    const deletePreset = async (presetName) => {
         if (presetName === "Default") {
             Alert.alert("Cannot Delete", "The Default preset cannot be deleted.");
             return;
@@ -664,21 +1131,36 @@ function LoadoutScreen() {
                 { 
                     text: "Delete", 
                     style: "destructive",
-                    onPress: () => {
-                        const updated = { ...presets };
-                        delete updated[presetName];
-                        setPresets(updated);
-                        
-                        if (selectedPreset === presetName) {
-                            setSelectedPreset("Default");
-                            setLoadout(updated.Default || { ...DEFAULT_LOADOUT });
+                    onPress: async () => {
+                        try {
+                            // Delete from Firebase first
+                            const firebaseSuccess = await deletePresetFromFirebase(presetName, currentUser);
+                            
+                            if (!firebaseSuccess) {
+                                Alert.alert("Error", "Failed to delete preset from database. Please try again.");
+                                return;
+                            }
+                            
+                            // Update local state
+                            const updated = { ...presets };
+                            delete updated[presetName];
+                            setPresets(updated);
+                            
+                            if (selectedPreset === presetName) {
+                                setSelectedPreset("Default");
+                                setLoadout(updated.Default || { ...DEFAULT_LOADOUT });
+                            }
+                            
+                            if (equippedPreset === presetName) {
+                                setEquippedPreset("Default");
+                            }
+                            
+                            Alert.alert("Success", `Preset "${presetName}" has been deleted.`);
+                            
+                        } catch (error) {
+                            console.log("Error deleting preset:", error);
+                            Alert.alert("Error", "An error occurred while deleting the preset. Please try again.");
                         }
-                        
-                        if (equippedPreset === presetName) {
-                            setEquippedPreset("Default");
-                        }
-                        
-                        savePresetsToFirebase(updated, currentUser);
                     }
                 }
             ]
@@ -725,7 +1207,9 @@ function LoadoutScreen() {
     };
 
     const handleSelectFilter = (key, value) => {
-        if (key === 'TypeBox') setSelectedType(value);
+        if (key === 'TypeBox') {
+            setSelectedType(value);
+        }
         if (key === 'TierBox') setSelectedTier(value);
         if (key === 'PartBox') setSelectedPartFilter(value);
         setActiveDropdown(null);
@@ -743,17 +1227,60 @@ function LoadoutScreen() {
     if (isLoading) {
         return (
             <SafeAreaView style={[styles.safeArea, { justifyContent: 'center', alignItems: 'center' }]}>
-                <ActivityIndicator size="large" color="#007AFF" />
-                <Text style={{ color: '#000', fontSize: scaleFont(16), marginTop: scaleSize(10) }}>Loading...</Text>
+                <ActivityIndicator size="large" color={COLORS.PRIMARY} />
+                <Text style={{ color: COLORS.TEXT_PRIMARY, fontSize: scaleFont(16), marginTop: scaleSize(10) }}>Loading...</Text>
             </SafeAreaView>
         );
     }
 
     return (
         <SafeAreaView style={styles.safeArea}>
+            <ImageBackground 
+                source={ASSETS.backgrounds.loadout}
+                style={styles.upperBackground}
+                resizeMode="cover"
+            >
+                <View style={styles.lowerBackground} />
+            </ImageBackground>
             
+            <View style={styles.sparkOverlay} pointerEvents="none">
+                {showEquipSpark && (
+                    <SparkAnimation 
+                        isActive={showEquipSpark}
+                        size={45}
+                        color={COLORS.SPARK_GOLD}
+                        count={12}
+                        duration={800}
+                        style={{
+                            position: 'absolute',
+                            top: SCREEN_HEIGHT * 0.15,
+                            left: SCREEN_WIDTH / 2 - 60,
+                        }}
+                    />
+                )}
+                
+                {showPresetSpark && (
+                    <SparkAnimation 
+                        isActive={showPresetSpark}
+                        size={35}
+                        color={COLORS.EQUIP_GREEN}
+                        count={10}
+                        duration={600}
+                        style={{
+                            position: 'absolute',
+                            top: SCREEN_HEIGHT * 0.42,
+                            left: SCREEN_WIDTH / 2 - 45,
+                        }}
+                    />
+                )}
+            </View>
 
-            {/* Robot Display Area */}
+            <PartStatsModal
+                isVisible={showPartStats}
+                onClose={() => setShowPartStats(false)}
+                partData={selectedPartData}
+            />
+
             <View style={styles.robotDisplayArea}>
                 <View style={styles.robotStage}>
                     {equippedWheels && (
@@ -787,48 +1314,30 @@ function LoadoutScreen() {
                 </View>
             </View>
 
-            {/* Presets Section - Made smaller */}
             <View style={styles.presetsContainer}>
                 <Text style={styles.sectionTitle}>Presets</Text>
                 
-                {/* New Preset Input */}
-                <View style={{ flexDirection: "row", marginTop: scaleSize(5), marginBottom: scaleSize(5) }}>
+                <View style={styles.presetInputContainer}>
                     <TextInput
                         value={presetNameInput}
                         onChangeText={setPresetNameInput}
                         placeholder="Enter preset name"
-                        placeholderTextColor="#999"
-                        style={{
-                            flex: 1,
-                            backgroundColor: "#fff",
-                            borderRadius: scaleSize(8),
-                            paddingHorizontal: scaleSize(10),
-                            height: scaleSize(35),
-                            borderWidth: 1,
-                            borderColor: "#ccc",
-                            fontSize: scaleFont(13),
-                        }}
+                        placeholderTextColor={COLORS.TEXT_MUTED}
+                        style={styles.presetInput}
                     />
 
                     <TouchableOpacity
                         onPress={savePreset}
-                        style={{
-                            marginLeft: scaleSize(8),
-                            backgroundColor: presetNameInput.trim() ? COLORS.PRIMARY : "#ccc",
-                            paddingHorizontal: scaleSize(12),
-                            borderRadius: scaleSize(8),
-                            justifyContent: "center",
-                            minWidth: scaleSize(50),
-                            alignItems: 'center',
-                            height: scaleSize(35),
-                        }}
+                        style={[
+                            styles.saveButton,
+                            !presetNameInput.trim() && styles.saveButtonDisabled
+                        ]}
                         disabled={!presetNameInput.trim()}
                     >
-                        <Text style={{ color: "white", fontWeight: "bold", fontSize: scaleFont(13) }}>Save</Text>
+                        <Text style={styles.saveButtonText}>Save</Text>
                     </TouchableOpacity>
                 </View>
 
-                {/* Preset Navigation - Made smaller - UPDATED with onEquipPreset prop */}
                 <PresetNavigation 
                     presets={presets}
                     selectedPreset={selectedPreset}
@@ -840,87 +1349,67 @@ function LoadoutScreen() {
                 />
             </View>
 
-            {/* Filter Row */}
             <View style={styles.filterRow}>
                 <FilterBox label="Type" value={selectedType} onPress={() => setActiveDropdown('TypeBox')} />
                 <FilterBox label="Tier" value={selectedTier} onPress={() => setActiveDropdown('TierBox')} />
                 <FilterBox label="Part" value={selectedPartFilter} onPress={() => setActiveDropdown('PartBox')} />
             </View>
 
-            {/* Parts Area */}
-            <ScrollView style={styles.partsArea} contentContainerStyle={{ paddingBottom: scaleSize(40) }}>
-                {categoriesToShow.map((category) => (
-                    <CategorySection 
-                        key={category} 
-                        title={category} 
-                        parts={PART_LISTS[category]}
-                        currentLoadout={loadout}
-                        onEquip={handleEquip}
-                        unlockedParts={unlockedParts}
-                    />
-                ))}
+            <ScrollView style={styles.partsScrollContainer} contentContainerStyle={styles.partsScrollContent}>
+                <View style={styles.partsContainer}>
+                    {categoriesToShow.map((category) => (
+                        <CategorySection 
+                            key={category} 
+                            title={category} 
+                            parts={PART_LISTS[category]}
+                            currentLoadout={loadout}
+                            onEquip={handleEquip}
+                            unlockedParts={unlockedParts}
+                            selectedType={selectedType}
+                            onPartLongPress={handlePartLongPress}
+                        />
+                    ))}
+                </View>
             </ScrollView>
             
-            {/* Rename Modal */}
             <Modal
                 visible={renameVisible}
                 transparent
                 animationType="fade"
             >
-                <Pressable style={{ 
-                    flex: 1,
-                    backgroundColor: "rgba(0,0,0,0.5)",
-                    justifyContent: "center",
-                    alignItems: "center"
-                }} onPress={() => setRenameVisible(false)}>
-                    <Pressable style={{
-                        width: "80%",
-                        backgroundColor: "#fff",
-                        padding: scaleSize(20),
-                        borderRadius: scaleSize(12)
-                    }} onPress={(e) => e.stopPropagation()}> 
-
-                        <Text style={{ fontSize: scaleFont(18), fontWeight: "bold" }}>
-                            Rename Preset
-                        </Text>
-
+                <Pressable style={styles.modalBackground} onPress={() => setRenameVisible(false)}>
+                    <Pressable style={styles.modalContainer} onPress={(e) => e.stopPropagation()}> 
+                        <Text style={styles.modalTitle}>Rename Preset</Text>
                         <TextInput
                             value={renameInput}
                             onChangeText={setRenameInput}
                             placeholder="New preset name"
-                            style={{
-                                marginTop: scaleSize(15),
-                                borderWidth: 1,
-                                borderColor: "#ccc",
-                                borderRadius: scaleSize(8),
-                                padding: scaleSize(10),
-                                fontSize: scaleFont(16)
-                            }}
+                            placeholderTextColor={COLORS.TEXT_MUTED}
+                            style={styles.modalInput}
                         />
-
-                        <View style={{ flexDirection: "row", marginTop: scaleSize(20), justifyContent: "flex-end" }}>
+                        <View style={styles.modalButtons}>
                             <TouchableOpacity onPress={() => setRenameVisible(false)}>
-                                <Text style={{ marginRight: scaleSize(20), fontSize: scaleFont(16) }}>Cancel</Text>
+                                <Text style={styles.modalCancelText}>Cancel</Text>
                             </TouchableOpacity>
-
                             <TouchableOpacity onPress={confirmRename}>
-                                <Text style={{ color: COLORS.PRIMARY, fontSize: scaleFont(16), fontWeight: "bold" }}>
-                                    Save
-                                </Text>
+                                <Text style={styles.modalSaveText}>Save</Text>
                             </TouchableOpacity>
                         </View>
                     </Pressable>
                 </Pressable>
             </Modal>
 
-            {/* Dropdown Modals */}
             {activeDropdown === 'TypeBox' && (
                 <DropdownModal
                     isVisible={true} 
                     onClose={() => setActiveDropdown(null)}
                     options={DROPDOWN_OPTIONS.TypeBox} 
                     onSelect={(v) => handleSelectFilter('TypeBox', v)}
-                    positionStyle={{top: scaleSize(125), left: scaleSize(20)}}
+                    positionStyle={{
+                        top: scaleSize(320),
+                        left: scaleSize(20),
+                        zIndex: 1000,
+                    }}
                 />
             )}
             {activeDropdown === 'TierBox' && (
@@ -929,7 +1418,11 @@ function LoadoutScreen() {
                     onClose={() => setActiveDropdown(null)}
                     options={DROPDOWN_OPTIONS.TierBox} 
                     onSelect={(v) => handleSelectFilter('TierBox', v)}
-                    positionStyle={{top: scaleSize(125), alignSelf: 'center'}}
+                    positionStyle={{
+                        top: scaleSize(320),
+                        left: SCREEN_WIDTH / 2 - scaleSize(70),
+                        zIndex: 1000,
+                    }}
                 />
             )}
             {activeDropdown === 'PartBox' && (
@@ -938,10 +1431,13 @@ function LoadoutScreen() {
                     onClose={() => setActiveDropdown(null)}
                     options={DROPDOWN_OPTIONS.PartBox} 
                     onSelect={(v) => handleSelectFilter('PartBox', v)}
-                    positionStyle={{top: scaleSize(125), right: scaleSize(20)}}
+                    positionStyle={{
+                        top: scaleSize(320),
+                        right: scaleSize(20),
+                        zIndex: 1000,
+                    }}
                 />
             )}
-
         </SafeAreaView>
     );
 }
@@ -949,19 +1445,141 @@ function LoadoutScreen() {
 const styles = StyleSheet.create({
     safeArea: { 
         flex: 1, 
-        backgroundColor: COLORS.WHITE 
+        backgroundColor: COLORS.BACKGROUND,
+    },
+    upperBackground: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        height: '65%',
+        zIndex: 0,
+    },
+    lowerBackground: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        height: '40%',
+        backgroundColor: COLORS.BACKGROUND,
+        zIndex: 1,
+    },
+    sparkOverlay: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        zIndex: 999,
+        pointerEvents: 'none',
+    },
+    sparkContainer: {
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    sparkElement: {
+        position: 'absolute',
+    },
+    centerGlow: {
+        position: 'absolute',
+    },
+    miniSparkContainer: {
+        position: 'absolute',
+        width: '100%',
+        height: '100%',
+        justifyContent: 'center',
+        alignItems: 'center',
+        pointerEvents: 'none',
+    },
+    miniSpark: {
+        width: 25,
+        height: 25,
+        borderRadius: 12.5,
+        opacity: 0.7,
+    },
+    statsModalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.7)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: scaleSize(20),
+    },
+    statsModalContainer: {
+        width: '90%',
+        maxWidth: scaleSize(400),
+        backgroundColor: COLORS.CARD_BG,
+        borderRadius: scaleSize(12),
+        overflow: 'hidden',
+        maxHeight: '70%',
+    },
+    statsModalHeader: {
+        padding: scaleSize(15),
+        borderBottomWidth: 1,
+        borderBottomColor: COLORS.BORDER,
+        backgroundColor: COLORS.MEDIUM_DARK_GRAY,
+    },
+    statsModalTitle: {
+        fontSize: scaleFont(18),
+        fontWeight: 'bold',
+        color: COLORS.TEXT_PRIMARY,
+        textAlign: 'center',
+        marginBottom: scaleSize(4),
+    },
+    statsModalSubtitle: {
+        fontSize: scaleFont(12),
+        color: COLORS.TEXT_SECONDARY,
+        textAlign: 'center',
+        textTransform: 'uppercase',
+        letterSpacing: scaleSize(0.5),
+    },
+    statsContent: {
+        maxHeight: SCREEN_HEIGHT * 0.4,
+        padding: scaleSize(15),
+    },
+    statItem: {
+        marginBottom: scaleSize(10),
+        padding: scaleSize(8),
+        backgroundColor: COLORS.BACKGROUND,
+        borderRadius: scaleSize(6),
+        borderLeftWidth: scaleSize(3),
+        borderLeftColor: COLORS.PRIMARY,
+    },
+    statText: {
+        fontSize: scaleFont(12),
+        color: COLORS.TEXT_PRIMARY,
+        lineHeight: scaleFont(16),
+    },
+    statsModalFooter: {
+        padding: scaleSize(15),
+        borderTopWidth: 1,
+        borderTopColor: COLORS.BORDER,
+        backgroundColor: COLORS.MEDIUM_DARK_GRAY,
+    },
+    statsCloseButton: {
+        backgroundColor: COLORS.PRIMARY,
+        paddingVertical: scaleSize(10),
+        paddingHorizontal: scaleSize(20),
+        borderRadius: scaleSize(6),
+        alignSelf: 'center',
+    },
+    statsCloseButtonText: {
+        color: COLORS.WHITE,
+        fontSize: scaleFont(14),
+        fontWeight: 'bold',
     },
     robotDisplayArea: { 
         alignItems: 'center', 
-        flex: 0.4, 
         justifyContent: 'center',
-        marginTop: scaleSize(20), 
+        marginTop: scaleSize(10),
+        paddingVertical: scaleSize(10),
+        height: SCREEN_HEIGHT * 0.3, 
+        zIndex: 2,
     },
     robotStage: {
-        width: SCREEN_WIDTH * 0.7,
-        height: SCREEN_WIDTH * 0.7,
-        maxWidth: scaleSize(350),
-        maxHeight: scaleSize(350),
+        width: SCREEN_WIDTH * 0.9, 
+        height: SCREEN_WIDTH * 0.9,
+        maxWidth: scaleSize(400),
+        maxHeight: scaleSize(500),
         justifyContent: 'center',
         alignItems: 'center',
         position: 'relative',
@@ -978,103 +1596,136 @@ const styles = StyleSheet.create({
         resizeMode: 'contain',
     },
     robotPlaceholder: { 
-        fontSize: scaleFont(16),
-        color: COLORS.DARK_GREY_TEXT,
+        fontSize: scaleFont(14),
+        color: COLORS.TEXT_PRIMARY,
         textAlign: 'center',
         paddingHorizontal: scaleSize(20),
     },
     sectionTitle: { 
-        fontSize: scaleFont(16),    
+        fontSize: scaleFont(18),
         fontWeight: 'bold', 
-        color: COLORS.DARK_GREY_TEXT, 
-        marginBottom: scaleSize(3)  
+        color: COLORS.TEXT_PRIMARY, 
+        marginBottom: scaleSize(8),
+        textAlign: 'center',
     },
     unlockCount: {
-        fontSize: scaleFont(11), 
-        color: COLORS.LOCKED,
+        fontSize: scaleFont(10),
+        color: COLORS.TEXT_MUTED,
         fontWeight: 'normal',
     },
     presetsContainer: {
-        width: '100%',
-        marginTop: scaleSize(5), 
+        width: '95%',
+        marginTop: scaleSize(30),
         paddingHorizontal: scaleSize(10),
+        backgroundColor: COLORS.CARD_BG,
+        marginHorizontal: scaleSize(10),
+        borderRadius: scaleSize(8),
+        padding: scaleSize(10),
+        zIndex: 2,
+    },
+    presetInputContainer: {
+        flexDirection: "row", 
+        marginTop: scaleSize(5),
+        marginBottom: scaleSize(5)
+    },
+    presetInput: {
+        flex: 1,
+        backgroundColor: COLORS.BACKGROUND,
+        borderRadius: scaleSize(6),
+        paddingHorizontal: scaleSize(8),
+        height: scaleSize(35),
+        borderWidth: 1,
+        borderColor: COLORS.BORDER,
+        fontSize: scaleFont(12),
+        color: COLORS.TEXT_PRIMARY,
+    },
+    saveButton: {
+        marginLeft: scaleSize(8),
+        backgroundColor: COLORS.PRIMARY,
+        paddingHorizontal: scaleSize(12),
+        borderRadius: scaleSize(6),
+        justifyContent: "center",
+        minWidth: scaleSize(50),
+        alignItems: 'center',
+        height: scaleSize(35),
+    },
+    saveButtonDisabled: {
+        backgroundColor: COLORS.ACCENT,
+    },
+    saveButtonText: {
+        color: COLORS.WHITE, 
+        fontWeight: "bold", 
+        fontSize: scaleFont(12)
     },
     presetNavigationContainer: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        marginTop: scaleSize(5), 
-        backgroundColor: '#f8f9fa',
-        borderRadius: scaleSize(8), 
-        padding: scaleSize(10), 
+        backgroundColor: COLORS.BACKGROUND,
+        borderRadius: scaleSize(6),
+        padding: scaleSize(8),
         borderWidth: 1,
-        borderColor: '#e9ecef',
+        borderColor: COLORS.BORDER,
     },
     navArrow: {
-        width: scaleSize(32), 
-        height: scaleSize(32), 
-        borderRadius: scaleSize(16), 
-        backgroundColor: COLORS.WHITE,
+        width: scaleSize(28),
+        height: scaleSize(28),
+        borderRadius: scaleSize(14),
+        backgroundColor: COLORS.BUTTON_BG,
         justifyContent: 'center',
         alignItems: 'center',
         borderWidth: 1,
-        borderColor: '#dee2e6',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: scaleSize(1) }, 
-        shadowOpacity: 0.1,
-        shadowRadius: scaleSize(2), 
-        elevation: 1, 
+        borderColor: COLORS.BORDER,
     },
     arrowIcon: {
-        width: scaleSize(16), 
-        height: scaleSize(16),  
-        tintColor: COLORS.ACCENT_GREY,
+        width: scaleSize(14), 
+        height: scaleSize(14), 
+        tintColor: COLORS.TEXT_PRIMARY,
     },
     presetDisplay: {
         flex: 1,
         alignItems: 'center',
-        marginHorizontal: scaleSize(10), 
+        marginHorizontal: scaleSize(8),
     },
     presetName: {
-        fontSize: scaleFont(16), 
+        fontSize: scaleFont(14),
         fontWeight: 'bold',
-        color: COLORS.DARK_GREY_TEXT,
+        color: COLORS.TEXT_PRIMARY,
         textAlign: 'center',
-        marginBottom: scaleSize(3),     
+        marginBottom: scaleSize(2),
     },
     presetPartsCount: {
-        fontSize: scaleFont(12),    
-        color: COLORS.ACCENT_GREY,
-        marginBottom: scaleSize(6),     
+        fontSize: scaleFont(10),
+        color: COLORS.TEXT_SECONDARY,
+        marginBottom: scaleSize(4),
     },
     presetActions: {
         flexDirection: 'row',
         justifyContent: 'center',
-        marginBottom: scaleSize(6), 
+        marginBottom: scaleSize(4),
     },
     presetActionButton: {
-        paddingHorizontal: scaleSize(8),    
-        paddingVertical: scaleSize(4), 
-        marginHorizontal: scaleSize(4), 
-        borderRadius: scaleSize(4), 
-        backgroundColor: '#e7f3ff',
-        minWidth: scaleSize(60),        
+        paddingHorizontal: scaleSize(6),
+        paddingVertical: scaleSize(3),
+        marginHorizontal: scaleSize(3),
+        borderRadius: scaleSize(3),
+        backgroundColor: COLORS.BUTTON_BG,
+        minWidth: scaleSize(50),
     },
-        
     equipButton: {
-        backgroundColor: '#e6f7e9',     
+        backgroundColor: COLORS.MEDIUM_GRAY,
     },
     equippedButton: {
-        backgroundColor: '#d4f1d8',     
+        backgroundColor: COLORS.LIGHT_DARK_GRAY,
         borderWidth: 1,
         borderColor: COLORS.EQUIP_GREEN,
     },
     deleteButton: {
-        backgroundColor: '#ffeaea',
+        backgroundColor: COLORS.MEDIUM_GRAY,
     },
     presetActionText: {
-        fontSize: scaleFont(11), 
-        color: COLORS.PRIMARY,
+        fontSize: scaleFont(9),
+        color: COLORS.TEXT_PRIMARY,
         fontWeight: '600',
         textAlign: 'center',
     },
@@ -1094,60 +1745,75 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     presetDot: {
-        width: scaleSize(5), 
-        height: scaleSize(5), 
-        borderRadius: scaleSize(2.5), 
-        backgroundColor: '#dee2e6',
-        marginHorizontal: scaleSize(2), 
+        width: scaleSize(4),
+        height: scaleSize(4),
+        borderRadius: scaleSize(2),
+        backgroundColor: COLORS.BORDER,
+        marginHorizontal: scaleSize(2),
     },
     presetDotActive: {
         backgroundColor: COLORS.PRIMARY,
-        width: scaleSize(6), 
-        height: scaleSize(6), 
-        borderRadius: scaleSize(3), 
+        width: scaleSize(5),
+        height: scaleSize(5),
+        borderRadius: scaleSize(2.5),
     },
     equippedPresetDot: {
         backgroundColor: COLORS.EQUIP_GREEN,
-        width: scaleSize(6), 
-        height: scaleSize(6),
-        borderRadius: scaleSize(3),
+        width: scaleSize(5),
+        height: scaleSize(5),
+        borderRadius: scaleSize(2.5),
     },
     filterRow: { 
         flexDirection: 'row', 
         justifyContent: 'space-evenly', 
-        paddingVertical: scaleSize(12), 
-        backgroundColor: COLORS.LIGHT_GREY, 
+        paddingVertical: scaleSize(8),
+        backgroundColor: COLORS.MEDIUM_DARK_GRAY,
         marginBottom: scaleSize(5), 
-        marginTop: scaleSize(5) 
+        marginTop: scaleSize(5),
+        marginHorizontal: scaleSize(10),
+        borderRadius: scaleSize(8),
+        zIndex: 2,
     },
     filterBox: { 
-        paddingHorizontal: scaleSize(10),   
-        paddingVertical: scaleSize(5), 
-        borderRadius: scaleSize(12), 
-        backgroundColor: COLORS.ACCENT_GREY, 
-        minWidth: scaleSize(80),    
+        paddingHorizontal: scaleSize(8),
+        paddingVertical: scaleSize(4),
+        borderRadius: scaleSize(10),
+        backgroundColor: COLORS.ACCENT,
+        minWidth: scaleSize(70),
         alignItems: 'center' 
     },
     filterText: { 
-        fontSize: scaleFont(12), 
+        fontSize: scaleFont(10),
         fontWeight: '600', 
-        color: 'white' 
+        color: COLORS.TEXT_PRIMARY 
     },
-    partsArea: { 
-        flex: 1, 
-        paddingHorizontal: scaleSize(15) 
+    partsScrollContainer: {
+        flex: 1,
+        zIndex: 2,
+        marginTop: scaleSize(5),
+    },
+    partsScrollContent: {
+        paddingBottom: scaleSize(40),
+    },
+    partsContainer: { 
+        paddingHorizontal: scaleSize(10),
+        backgroundColor: COLORS.CARD_BG,
+        marginHorizontal: scaleSize(10),
+        borderRadius: scaleSize(8),
+        marginTop: scaleSize(5),
+        padding: scaleSize(10),
     },
     categorySection: { 
-        marginTop: scaleSize(12), 
+        marginTop: scaleSize(10), 
         borderBottomWidth: 1, 
-        borderBottomColor: '#eee', 
-        paddingBottom: scaleSize(12) 
+        borderBottomColor: COLORS.BORDER, 
+        paddingBottom: scaleSize(10) 
     },
     categoryTitle: { 
-        fontSize: scaleFont(16), 
+        fontSize: scaleFont(14),
         fontWeight: 'bold', 
-        color: COLORS.ACCENT_GREY, 
-        marginBottom: scaleSize(8), 
+        color: COLORS.TEXT_PRIMARY, 
+        marginBottom: scaleSize(6),
         textTransform: 'uppercase', 
         letterSpacing: scaleSize(0.5) 
     },
@@ -1160,7 +1826,7 @@ const styles = StyleSheet.create({
     partItem: { 
         alignItems: 'center', 
         width: SCREEN_WIDTH * 0.28,
-        marginBottom: scaleSize(12) 
+        marginBottom: scaleSize(10) 
     },
     lockedPartItem: { 
         opacity: 0.7 
@@ -1168,18 +1834,18 @@ const styles = StyleSheet.create({
     imageContainer: {
         width: SCREEN_WIDTH * 0.28,
         height: SCREEN_WIDTH * 0.28,
-        backgroundColor: '#f9f9f9', 
-        borderRadius: scaleSize(10), 
-        marginBottom: scaleSize(6), 
+        backgroundColor: COLORS.BACKGROUND,
+        borderRadius: scaleSize(8),
+        marginBottom: scaleSize(4),
         justifyContent: 'center', 
         alignItems: 'center', 
         borderWidth: 1, 
-        borderColor: COLORS.LIGHT_GREY,
+        borderColor: COLORS.BORDER,
         overflow: 'hidden',
         position: 'relative',
     },
     lockedContainer: {
-        backgroundColor: '#e0e0e0',
+        backgroundColor: COLORS.MEDIUM_GRAY,
         borderColor: COLORS.LOCKED,
     },
     lockOverlay: {
@@ -1194,14 +1860,14 @@ const styles = StyleSheet.create({
         padding: scaleSize(4), 
     },
     padlockIcon: {
-        width: scaleSize(35), 
-        height: scaleSize(35), 
-        tintColor: 'white',
+        width: scaleSize(30),
+        height: scaleSize(30),
+        tintColor: COLORS.TEXT_PRIMARY,
         marginBottom: scaleSize(3), 
     },
     lockText: {
-        color: 'white',
-        fontSize: scaleFont(9),
+        color: COLORS.TEXT_PRIMARY,
+        fontSize: scaleFont(8),
         fontWeight: 'bold',
     },
     partImage: { 
@@ -1212,48 +1878,94 @@ const styles = StyleSheet.create({
         opacity: 0.3 
     },
     partLabel: { 
-        fontSize: scaleFont(11), 
+        fontSize: scaleFont(10),
         fontWeight: '600', 
-        color: COLORS.DARK_GREY_TEXT, 
+        color: COLORS.TEXT_PRIMARY, 
         textAlign: 'center' 
     },
     lockedText: { 
-        color: COLORS.LOCKED 
+        color: COLORS.TEXT_MUTED 
     },
     equippedContainer: {
         borderColor: COLORS.SELECTED_BORDER,
         borderWidth: scaleSize(2),
-        backgroundColor: '#E3F2FD',
+        backgroundColor: COLORS.MEDIUM_DARK_GRAY,
     },
     equippedText: { 
         color: COLORS.SELECTED_BORDER, 
         fontWeight: '700' 
     },
+    modalBackground: {
+        flex: 1,
+        backgroundColor: "rgba(0,0,0,0.7)",
+        justifyContent: "center",
+        alignItems: "center"
+    },
+    modalContainer: {
+        width: "80%",
+        backgroundColor: COLORS.CARD_BG,
+        padding: scaleSize(20),
+        borderRadius: scaleSize(12)
+    },
+    modalTitle: {
+        fontSize: scaleFont(18), 
+        fontWeight: "bold",
+        color: COLORS.TEXT_PRIMARY,
+        marginBottom: scaleSize(15),
+    },
+    modalInput: {
+        marginTop: scaleSize(15),
+        borderWidth: 1,
+        borderColor: COLORS.BORDER,
+        borderRadius: scaleSize(8),
+        padding: scaleSize(10),
+        fontSize: scaleFont(16),
+        color: COLORS.TEXT_PRIMARY,
+        backgroundColor: COLORS.BACKGROUND,
+    },
+    modalButtons: {
+        flexDirection: "row", 
+        marginTop: scaleSize(20), 
+        justifyContent: "flex-end" 
+    },
+    modalCancelText: {
+        marginRight: scaleSize(20), 
+        fontSize: scaleFont(16),
+        color: COLORS.TEXT_SECONDARY,
+    },
+    modalSaveText: {
+        color: COLORS.PRIMARY, 
+        fontSize: scaleFont(16), 
+        fontWeight: "bold" 
+    },
     modalOverlay: { 
         flex: 1, 
-        backgroundColor: 'rgba(0,0,0,0.2)' 
+        backgroundColor: 'rgba(0,0,0,0.5)' 
     },
     dropdownContainer: { 
         position: 'absolute', 
         width: scaleSize(140), 
-        backgroundColor: 'white', 
+        backgroundColor: COLORS.CARD_BG,
         borderRadius: scaleSize(8), 
-        elevation: 5, 
+        elevation: 10, 
         shadowColor: '#000', 
-        shadowOffset: { width: 0, height: scaleSize(2) }, 
-        shadowOpacity: 0.25, 
-        shadowRadius: scaleSize(3.84), 
-        paddingVertical: scaleSize(5) 
+        shadowOffset: { width: 0, height: scaleSize(4) }, 
+        shadowOpacity: 0.3, 
+        shadowRadius: scaleSize(5), 
+        paddingVertical: scaleSize(5),
+        zIndex: 1000,
+        borderWidth: 1,
+        borderColor: COLORS.BORDER,
     },
     dropdownItem: { 
         paddingVertical: scaleSize(12), 
         paddingHorizontal: scaleSize(15), 
         borderBottomWidth: 1, 
-        borderBottomColor: '#eee' 
+        borderBottomColor: COLORS.BORDER 
     },
     dropdownText: { 
         fontSize: scaleFont(14), 
-        color: COLORS.DARK_GREY_TEXT 
+        color: COLORS.TEXT_PRIMARY 
     },
 });
 

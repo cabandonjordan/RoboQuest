@@ -8,12 +8,13 @@ import {
     Text, 
     Animated, 
     Dimensions, 
-    ImageBackground 
+    ImageBackground,
+    Easing
 } from 'react-native'; 
 import { useNavigation, useIsFocused } from '@react-navigation/native';
 import { auth, db, doc, getDoc, onAuthStateChanged } from './database/firebase';
 
-// Color Used in Hex and Rgba formats
+// Color Used are in Hex and Rgba formats
 const Indent_Color = '#06DFDE';
 const LIGHT_BLUE = '#00FFFF'; 
 const Transparent_BG = 'rgba(0, 0, 0, 0)'; 
@@ -48,7 +49,7 @@ const ICONS = {
     collection: require('./assets/icons/collection.png'),
     journal: require('./assets/icons/journal.png'),       
     main_menubg: require('./assets/background/MainMenubgOff.png'), 
-    main_menubg_on: require('./assets/background/MainMenubg.png'), // Added the "on" version
+    main_menubg_on: require('./assets/background/MainMenubg.png'),
 };
 
 const ASSETS = {
@@ -75,13 +76,199 @@ const DEFAULT_LOADOUT = {
     Weapon: 'WeaponGeneralis'
 };
 
-const baseIconStyle = {
-    width: scaleSize(CONTAINER_SIZE),
-    height: scaleSize(CONTAINER_SIZE),
-    borderRadius: scaleSize(CONTAINER_SIZE) / 2,
-    backgroundColor: CIRCLE_BG_COLOR, 
-    justifyContent: 'center',
-    alignItems: 'center',
+const SparkAnimation = ({ 
+    isActive = false, 
+    size = 30, 
+    color = LIGHT_BLUE, 
+    count = 6, 
+    duration = 800,
+    style = {},
+    position = 'center' // 'center', 'top', 'back', 'left', 'right'
+}) => {
+    const animValues = useRef([]);
+    const scales = useRef([]);
+    const rotations = useRef([]);
+    const opacities = useRef([]);
+
+    useEffect(() => {
+        animValues.current = Array(count).fill(0).map(() => new Animated.Value(0));
+        scales.current = Array(count).fill(0).map(() => new Animated.Value(0.5));
+        rotations.current = Array(count).fill(0).map(() => new Animated.Value(0));
+        opacities.current = Array(count).fill(0).map(() => new Animated.Value(0));
+    }, [count]);
+
+    useEffect(() => {
+        if (isActive) {
+            startAnimation();
+        }
+    }, [isActive]);
+
+    const startAnimation = () => {
+        animValues.current.forEach(anim => anim.setValue(0));
+        scales.current.forEach(scale => scale.setValue(0.5));
+        rotations.current.forEach(rotation => rotation.setValue(0));
+        opacities.current.forEach(opacity => opacity.setValue(0));
+
+        const animations = animValues.current.map((anim, index) => {
+            const delay = index * (duration / count / 3);
+            
+            return Animated.parallel([
+                Animated.timing(anim, {
+                    toValue: 1,
+                    duration: duration,
+                    delay,
+                    easing: Easing.out(Easing.cubic),
+                    useNativeDriver: true,
+                }),
+                Animated.sequence([
+                    Animated.timing(scales.current[index], {
+                        toValue: 1,
+                        duration: duration * 0.3,
+                        delay,
+                        easing: Easing.out(Easing.back(1.2)),
+                        useNativeDriver: true,
+                    }),
+                    Animated.timing(scales.current[index], {
+                        toValue: 0.2,
+                        duration: duration * 0.7,
+                        delay: delay + duration * 0.3,
+                        easing: Easing.in(Easing.cubic),
+                        useNativeDriver: true,
+                    }),
+                ]),
+                Animated.timing(rotations.current[index], {
+                    toValue: 1,
+                    duration: duration * 1.5,
+                    delay,
+                    easing: Easing.linear,
+                    useNativeDriver: true,
+                }),
+                Animated.sequence([
+                    Animated.timing(opacities.current[index], {
+                        toValue: 1,
+                        duration: duration * 0.2,
+                        delay,
+                        useNativeDriver: true,
+                    }),
+                    Animated.timing(opacities.current[index], {
+                        toValue: 0,
+                        duration: duration * 0.8,
+                        delay: delay + duration * 0.2,
+                        useNativeDriver: true,
+                    }),
+                ]),
+            ]);
+        });
+
+        Animated.parallel(animations).start();
+    };
+
+    const getSparkPosition = (index) => {
+        const angle = (index / count) * Math.PI * 2;
+        let radius = size * 1.2;
+        switch(position) {
+            case 'top':
+                const topAngle = (index / count) * Math.PI; 
+                const topRadius = size * 1.5;
+                return {
+                    left: topRadius * Math.cos(topAngle),
+                    top: -topRadius * 0.8, 
+                };
+            case 'back':
+                const backRadius = size * 1.8;
+                return {
+                    left: backRadius * Math.cos(angle),
+                    top: backRadius * Math.sin(angle) * 0.5, 
+                };
+            case 'left':
+                const leftAngle = (index / count) * Math.PI * 1.5; 
+                return {
+                    left: -size * 1.5,
+                    top: size * Math.sin(leftAngle) * 0.8,
+                };
+            case 'right':
+                const rightAngle = (index / count) * Math.PI * 1.5; 
+                return {
+                    left: size * 1.5,
+                    top: size * Math.sin(rightAngle) * 0.8,
+                };
+            default: 
+                return {
+                    left: radius * Math.cos(angle),
+                    top: radius * Math.sin(angle),
+                };
+        }
+    };
+
+    const renderSparks = () => {
+        return animValues.current.map((anim, index) => {
+            const positionData = getSparkPosition(index);
+            
+            const translateX = anim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0, positionData.left],
+            });
+            
+            const translateY = anim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0, positionData.top],
+            });
+            
+            const scale = scales.current[index].interpolate({
+                inputRange: [0, 1],
+                outputRange: [0.5, 1],
+            });
+            
+            const rotate = rotations.current[index].interpolate({
+                inputRange: [0, 1],
+                outputRange: ['0deg', '720deg'],
+            });
+
+            const opacity = opacities.current[index];
+
+            return (
+                <Animated.View
+                    key={index}
+                    style={[
+                        styles.sparkElement,
+                        {
+                            backgroundColor: color,
+                            opacity: opacity,
+                            width: size / 4,
+                            height: size / 4,
+                            borderRadius: size / 8,
+                            transform: [
+                                { translateX },
+                                { translateY },
+                                { scale },
+                                { rotate },
+                            ],
+                        },
+                    ]}
+                />
+            );
+        });
+    };
+
+    return (
+        <View style={[styles.sparkContainer, { width: size * 3, height: size * 3 }, style]}>
+            {renderSparks()}
+            {isActive && (
+                <Animated.View
+                    style={[
+                        styles.centerGlow,
+                        {
+                            backgroundColor: color,
+                            width: size * 0.8,
+                            height: size * 0.8,
+                            borderRadius: size * 0.4,
+                            opacity: opacities.current[0] || 0,
+                        },
+                    ]}
+                />
+            )}
+        </View>
+    );
 };
 
 // Action Panel Button Component
@@ -146,7 +333,7 @@ const QuestList = ({ show, slideAnim, questIconLayout }) => {
         left: 0, 
     };
 
-    const QUESTS = ["• Collect 5 Energy Cells", "• Defeat Boss Unit 3", "• Visit the Workshop"];
+    const QUESTS = ["• Defeat Stage 1", "• Defeat Stage 2", "• Defeat Stage 3"];
 
     return (
         <Animated.View style={[questListStyles.container, animatedStyle, { width: questListWidth }]}>
@@ -159,8 +346,34 @@ const QuestList = ({ show, slideAnim, questIconLayout }) => {
     );
 };
 
+const SimpleTopIconButton = ({ iconSource, onPress, isQuest = false, isActive = false, refProp = null }) => {
+    return (
+        <TouchableOpacity 
+            style={[
+                styles.topIconButton,
+                isActive && styles.topIconButtonActive
+            ]} 
+            onPress={onPress}
+            ref={refProp}
+            activeOpacity={0.7}
+        >
+            <Image 
+                source={iconSource} 
+                style={[
+                    styles.topIconImage,
+                    isQuest && isActive && { tintColor: LIGHT_BLUE }
+                ]} 
+                resizeMode="contain"
+            />
+        </TouchableOpacity>
+    );
+};
+
 // Robot Preview Component
 const RobotPreview = ({ loadout }) => {
+    const [showSpark, setShowSpark] = useState(false);
+    const [sparkPosition, setSparkPosition] = useState('top');
+    
     const getWeaponOffset = () => {
         const weapon = loadout?.Weapon;
         const chassis = loadout?.Chassis;
@@ -188,6 +401,16 @@ const RobotPreview = ({ loadout }) => {
         return 0;
     };
 
+    const handleRobotTap = () => {
+        const positions = ['top', 'center', 'back', 'left', 'right'];
+        const randomPosition = positions[Math.floor(Math.random() * positions.length)];
+        setSparkPosition(randomPosition);
+        setShowSpark(true);
+        setTimeout(() => {
+            setShowSpark(false);
+        }, 800);
+    };
+
     const equippedWeapon = loadout?.Weapon;
     const equippedChassis = loadout?.Chassis;
     const equippedEngine = loadout?.Engines;
@@ -195,7 +418,11 @@ const RobotPreview = ({ loadout }) => {
 
     if (!loadout || (!equippedWeapon && !equippedChassis && !equippedEngine && !equippedWheels)) {
         return (
-            <View style={styles.robotPreviewContainer}>
+            <TouchableOpacity 
+                style={styles.robotPreviewContainer} 
+                onPress={handleRobotTap}
+                activeOpacity={1}
+            >
                 <View style={styles.robotStage}>
                     <Text style={{ color: LIGHT_BLUE, fontSize: scaleFont(16), textAlign: 'center' }}>
                         No robot configured
@@ -204,14 +431,65 @@ const RobotPreview = ({ loadout }) => {
                         Go to Loadout to customize your robot
                     </Text>
                 </View>
-            </View>
+            </TouchableOpacity>
         );
     }
 
+    const robotSize = {
+        width: SCREEN_WIDTH * 0.8,
+        height: SCREEN_WIDTH * 0.8
+    };
+    const getSparkStyle = (position) => {
+        const robotCenterX = robotSize.width / 2;
+        const robotCenterY = robotSize.height / 2;
+        
+        switch(position) {
+            case 'top':
+                return {
+                    position: 'absolute',
+                    top: -robotSize.height * 0.15,
+                    left: robotCenterX - 45,
+                };
+            case 'back':
+                return {
+                    position: 'absolute',
+                    top: robotCenterY - 30,
+                    left: robotSize.width * 0.15,
+                };
+            case 'center':
+                return {
+                    position: 'absolute',
+                    top: robotCenterY - 45,
+                    left: robotCenterX - 45,
+                };
+            case 'left':
+                return {
+                    position: 'absolute',
+                    top: robotCenterY - 45,
+                    left: -45,
+                };
+            case 'right':
+                return {
+                    position: 'absolute',
+                    top: robotCenterY - 45,
+                    left: robotSize.width - 45,
+                };
+            default:
+                return {
+                    position: 'absolute',
+                    top: robotCenterY - 45,
+                    left: robotCenterX - 45,
+                };
+        }
+    };
+
     return (
-        <View style={styles.robotPreviewContainer}>
-            <View style={styles.robotStage}>
-                {/* Wheels */}
+        <TouchableOpacity 
+            style={styles.robotPreviewContainer} 
+            onPress={handleRobotTap}
+            activeOpacity={1}
+        >
+            <View style={[styles.robotStage, { width: robotSize.width, height: robotSize.height }]}>
                 {equippedWheels && (
                     <Image 
                         source={ASSETS.parts[equippedWheels]} 
@@ -220,7 +498,6 @@ const RobotPreview = ({ loadout }) => {
                     />
                 )}
 
-                {/* Chassis */}
                 {equippedChassis && (
                     <Image 
                         source={ASSETS.parts[equippedChassis]} 
@@ -229,7 +506,6 @@ const RobotPreview = ({ loadout }) => {
                     />
                 )}
 
-                {/* Engine */}
                 {equippedEngine && (
                     <Image 
                         source={ASSETS.parts[equippedEngine]} 
@@ -238,7 +514,6 @@ const RobotPreview = ({ loadout }) => {
                     />
                 )}
                 
-                {/* Weapon */}
                 {equippedWeapon && (
                     <Image 
                         source={ASSETS.parts[equippedWeapon]} 
@@ -252,31 +527,20 @@ const RobotPreview = ({ loadout }) => {
                         resizeMode="contain"
                     />
                 )}
+                
+                {showSpark && (
+                    <View style={getSparkStyle(sparkPosition)} pointerEvents="none">
+                        <SparkAnimation 
+                            isActive={showSpark}
+                            size={35}
+                            color={LIGHT_BLUE}
+                            count={8}
+                            duration={800}
+                            position={sparkPosition}
+                        />
+                    </View>
+                )}
             </View>
-        </View>
-    );
-};
-
-// Top Icon Button Component
-const TopIconButton = ({ iconSource, onPress, isQuest = false, isActive = false, refProp = null }) => {
-    return (
-        <TouchableOpacity 
-            style={[
-                styles.topIconButton,
-                isActive && styles.topIconButtonActive
-            ]} 
-            onPress={onPress}
-            ref={refProp}
-            activeOpacity={0.7}
-        >
-            <Image 
-                source={iconSource} 
-                style={[
-                    styles.topIconImage,
-                    isQuest && isActive && { tintColor: LIGHT_BLUE }
-                ]} 
-                resizeMode="contain"
-            />
         </TouchableOpacity>
     );
 };
@@ -466,22 +730,16 @@ function MainMenuScreen() {
                 questIconLayout={questIconLayout}
             />
 
-            {/* Base Background (always visible) */}
             <ImageBackground 
                 source={ICONS.main_menubg}
                 style={styles.background}
                 resizeMode="cover"
             >
-                {/* Blinking Light Animation Overlay */}
                 <BlinkingLightAnimation isVisible={isFocused} />
-                
-                {/* Content Layer */}
                 <View style={styles.contentContainer}>
-                    
-                    {/* Top Navigation Bar - Fixed Positioning */}
                     <View style={styles.topNavBar}>
                         <View style={styles.topNavLeft}>
-                            <TopIconButton 
+                            <SimpleTopIconButton 
                                 iconSource={ICONS.quest}
                                 onPress={toggleQuestList}
                                 isQuest={true}
@@ -491,18 +749,17 @@ function MainMenuScreen() {
                         </View>
                         
                         <View style={styles.topNavRight}>
-                            <TopIconButton 
+                            <SimpleTopIconButton 
                                 iconSource={ICONS.shop}
                                 onPress={() => navigation.navigate('Shop')}
                             />
-                            <TopIconButton 
+                            <SimpleTopIconButton 
                                 iconSource={ICONS.settings}
                                 onPress={() => navigation.navigate('Settings')}
                             />
                         </View>
                     </View>
                     
-                    {/* Robot Preview in Center */}
                     <View style={styles.centerContent}>
                         <RobotPreview 
                             loadout={currentLoadout} 
@@ -543,14 +800,13 @@ function MainMenuScreen() {
     );
 }
 
-// Quest List Styles
 const questListStyles = StyleSheet.create({
     container: {
         position: 'absolute',
         backgroundColor: PANEL_DARK_BG,
         borderRadius: scaleSize(8),
         padding: scaleSize(10),
-        zIndex: 50, 
+        zIndex: 100, 
         shadowColor: '#000',
         shadowOffset: { width: 0, height: scaleSize(2) },
         shadowOpacity: 0.5,
@@ -589,6 +845,18 @@ const styles = StyleSheet.create({
         paddingVertical: scaleSize(-1),
     },
     
+    sparkContainer: {
+        justifyContent: 'center',
+        alignItems: 'center',
+        pointerEvents: 'none', 
+    },
+    sparkElement: {
+        position: 'absolute',
+    },
+    centerGlow: {
+        position: 'absolute',
+    },
+    
     // TOP NAVIGATION BAR 
     topNavBar: {
         flexDirection: 'row',
@@ -599,7 +867,7 @@ const styles = StyleSheet.create({
         paddingBottom: scaleSize(10),
         backgroundColor: 'rgba(0, 0, 0, 0.3)',
         width: '100%',
-        zIndex: 10, 
+        zIndex: 50, 
     },
     topNavLeft: {
         flex: 1,
@@ -625,7 +893,7 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.2,
         shadowRadius: scaleSize(3),
         elevation: 3,
-        zIndex: 10,
+        zIndex: 51, 
     },
     topIconButtonActive: {
         backgroundColor: 'rgba(0, 191, 255, 0.2)',
@@ -637,21 +905,19 @@ const styles = StyleSheet.create({
         tintColor: LIGHT_BLUE,
     },
     
-    // Center Content for Robot
     centerContent: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
         marginTop: scaleSize(-30),
-        zIndex: 10,
+        zIndex: 1,
     },
     
-    // Robot Preview Styles
     robotPreviewContainer: {
         alignItems: 'center',
         justifyContent: 'center',
         marginBottom: scaleSize(-100),
-        zIndex: 10,
+        zIndex: 1,
         position: 'relative',
     },
     robotStage: {
