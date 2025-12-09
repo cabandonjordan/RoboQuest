@@ -13,7 +13,7 @@ import {
   Platform
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { auth, signInWithEmailAndPassword, GoogleAuthProvider, signInWithCredential, fetchSignInMethodsForEmail } from './database/firebase';
+import { auth, signInWithEmailAndPassword } from './database/firebase';
 
 const { width, height } = Dimensions.get('window');
 
@@ -207,21 +207,6 @@ const TitleScreen = () => {
                     <Text style={styles.modalSignUpButtonText}>Sign Up</Text>
                   </TouchableOpacity>
                 </View>
-
-                {/* Separator */}
-                <View style={styles.separator}>
-                  <View style={styles.separatorLine} />
-                  <Text style={styles.separatorText}>OR</Text>
-                  <View style={styles.separatorLine} />
-                </View>
-
-                {/* Google Sign In Button */}
-                <TouchableOpacity
-                  style={styles.googleButton}
-                  onPress={() => console.log('Google Sign In')}
-                >
-                  <Text style={styles.googleButtonText}>Sign in with Google</Text>
-                </TouchableOpacity>
               </View>
             </TouchableOpacity>
           </KeyboardAvoidingView>
@@ -424,40 +409,6 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
-    textAlign: 'center',
-  },
-  separator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: 24,
-  },
-  separatorLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: '#d1d5db',
-  },
-  separatorText: {
-    fontSize: 14,
-    color: '#9ca3af',
-    marginHorizontal: 16,
-  },
-  googleButton: {
-    width: '100%',
-    paddingVertical: 12,
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 8,
-    backgroundColor: '#fff',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  googleButtonText: {
-    color: '#1f2937',
-    fontSize: 16,
-    fontWeight: '500',
     textAlign: 'center',
   },
 });

@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, Image, SafeAreaView, ActivityIndicator } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, Image, SafeAreaView, ActivityIndicator, ScrollView, ImageBackground } from "react-native";
 import { auth, db, doc, getDoc, onAuthStateChanged } from './database/firebase';
 
 const BATTLE = {
   enemy: require("./assets/battle/enemy.png"),
+  background: require("./assets/background/BattleBGday.png"),
 };
 
 const ASSETS = {
@@ -30,14 +31,52 @@ const DEFAULT_LOADOUT = {
   Weapon: 'WeaponGeneralis'
 };
 
+// Attack stats from spreadsheet
+const ATTACK_STATS = {
+  WeaponGeneralis: {
+    name: 'Twin Anti-Air Guns',
+    attacks: [
+      { name: 'Burst Fire', damage: { min: 40, max: 60 } },
+      { name: 'Suppressive Fire', damage: { min: 50, max: 70 } }
+    ]
+  },
+  WeaponInnovare: {
+    name: 'Missile Launcher Arrays',
+    attacks: [
+      { name: 'Offensive Launch', damage: { min: 65, max: 85 } },
+      { name: 'Counter-Measure Launch', damage: { min: 60, max: 80 } }
+    ]
+  },
+  WeaponCreativia: {
+    name: 'Laser Spread',
+    attacks: [
+      { name: 'Laser Blast', damage: { min: 50, max: 70 } },
+      { name: 'Overdrive Cascade', damage: { min: 85, max: 115 } }
+    ]
+  },
+  ChassisGeneralis: { hp: 650 },
+  ChassisInnovare: { hp: 750 },
+  ChassisCreativia: { hp: 500 },
+};
+
 function BattleScreen() {
   const [loadout, setLoadout] = useState(DEFAULT_LOADOUT);
   const [isLoading, setIsLoading] = useState(true);
+  const [playerHP, setPlayerHP] = useState(650);
+  const [enemyHP, setEnemyHP] = useState(100);
+  const [playerMaxHP, setPlayerMaxHP] = useState(650);
+  const [enemyMaxHP, setEnemyMaxHP] = useState(100);
+  const [battleLog, setBattleLog] = useState(['Battle Started!']);
+  const [isAttacking, setIsAttacking] = useState(false);
+  const [battleEnded, setBattleEnded] = useState(false);
+  const [winner, setWinner] = useState(null);
+  const [playerName, setPlayerName] = useState('Player');
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         const userName = user.displayName || user.email;
+        setPlayerName(userName);
         try {
           const docRef = doc(db, 'Roboquest-Loadout', userName);
           const docSnap = await getDoc(docRef);
@@ -46,10 +85,16 @@ function BattleScreen() {
             const data = docSnap.data();
             if (data.presets && data.presets.Default) {
               setLoadout(data.presets.Default);
+              initializeBattle(data.presets.Default);
+            } else {
+              initializeBattle(DEFAULT_LOADOUT);
             }
+          } else {
+            initializeBattle(DEFAULT_LOADOUT);
           }
         } catch (error) {
           console.log("Error loading loadout:", error);
+          initializeBattle(DEFAULT_LOADOUT);
         }
       }
       setIsLoading(false);
@@ -57,6 +102,64 @@ function BattleScreen() {
 
     return () => unsubscribe();
   }, []);
+
+  const initializeBattle = (currentLoadout) => {
+    const chassisStats = ATTACK_STATS[currentLoadout.Chassis] || ATTACK_STATS.ChassisGeneralis;
+    const baseHP = chassisStats.hp || 650;
+    setPlayerMaxHP(baseHP);
+    setPlayerHP(baseHP);
+    setEnemyMaxHP(100);
+    setEnemyHP(100);
+  };
+
+  const calculateDamage = (damageRange) => {
+    const { min, max } = damageRange;
+    const baseVariation = Math.floor(Math.random() * (max - min + 1) + min);
+    const variation = Math.floor(baseVariation * (0.85 + Math.random() * 0.3));
+    return Math.max(5, variation);
+  };
+
+  const handleAttack = (attackIndex) => {
+    if (isAttacking || battleEnded) return;
+    setIsAttacking(true);
+
+    const weaponStats = ATTACK_STATS[loadout.Weapon] || ATTACK_STATS.WeaponGeneralis;
+    const attack = weaponStats.attacks[attackIndex];
+    if (!attack) {
+      setIsAttacking(false);
+      return;
+    }
+
+    const playerDamage = calculateDamage(attack.damage);
+    const newEnemyHP = Math.max(0, enemyHP - playerDamage);
+    setEnemyHP(newEnemyHP);
+    setBattleLog(prev => [...prev, `You used ${attack.name}! Dealt ${playerDamage} damage!`]);
+
+    setTimeout(() => {
+      if (newEnemyHP <= 0) {
+        setBattleLog(prev => [...prev, "Enemy defeated!"]);
+        setBattleEnded(true);
+        setWinner('player');
+        setIsAttacking(false);
+        return;
+      }
+
+      const enemyAttack = weaponStats.attacks[Math.floor(Math.random() * 2)];
+      const enemyDamage = calculateDamage(enemyAttack.damage);
+      const newPlayerHP = Math.max(0, playerHP - enemyDamage);
+      setPlayerHP(newPlayerHP);
+      setBattleLog(prev => [...prev, `Enemy used ${enemyAttack.name}! Dealt ${enemyDamage} damage!`]);
+
+      if (newPlayerHP <= 0) {
+        setBattleLog(prev => [...prev, "You were defeated!"]);
+        setBattleEnded(true);
+        setWinner('enemy');
+        setIsAttacking(false);
+        return;
+      }
+      setIsAttacking(false);
+    }, 600);
+  };
 
   const getWeaponOffset = () => {
     const weapon = loadout.Weapon;
@@ -98,181 +201,331 @@ function BattleScreen() {
   const equippedChassis = loadout.Chassis;
   const equippedEngine = loadout.Engines;
   const equippedWheels = loadout.Wheels;
+  const weaponStats = ATTACK_STATS[equippedWeapon] || ATTACK_STATS.WeaponGeneralis;
+  const playerHPPercent = (playerHP / playerMaxHP) * 100;
+  const enemyHPPercent = (enemyHP / enemyMaxHP) * 100;
 
   return (
-    <SafeAreaView style={styles.container}>
-
-      {/* ENEMY (Top Right) */}
-      <View style={styles.enemyContainer}>
-        <Image source={BATTLE.enemy} style={styles.enemyImg} />
-        <View style={styles.healthBar}>
-          <View style={[styles.healthFill, { width: "80%", backgroundColor: "#D9534F" }]} />
+    <ImageBackground source={BATTLE.background} style={styles.container} resizeMode="cover">
+      <View style={styles.arenaContainer}>
+        {/* ENEMY TOP RIGHT */}
+        <View style={styles.enemyContainer}>
+          <Text style={styles.enemyLabel}>Enemy</Text>
+          <Image source={BATTLE.enemy} style={styles.enemyImg} />
+          <View style={styles.healthBar}>
+            <View style={[styles.healthFill, { width: `${Math.max(0, enemyHPPercent)}%`, backgroundColor: "#E74C3C" }]} />
+          </View>
+          <Text style={styles.healthText}>{Math.max(0, enemyHP)} / {enemyMaxHP}</Text>
         </View>
-        <Text style={styles.healthLabel}>Enemy</Text>
+
+        {/* PLAYER BOTTOM LEFT */}
+        <View style={styles.playerContainer}>
+          <View style={styles.robotStage}>
+            {equippedWheels && ASSETS.parts[equippedWheels] && (
+              <Image 
+                source={ASSETS.parts[equippedWheels]} 
+                style={[styles.robotLayer, { zIndex: 30 }]} 
+                resizeMode="contain" 
+              />
+            )}
+            {equippedChassis && ASSETS.parts[equippedChassis] && (
+              <Image 
+                source={ASSETS.parts[equippedChassis]} 
+                style={[styles.robotLayer, { zIndex: 10 }]} 
+                resizeMode="contain" 
+              />
+            )}
+            {equippedEngine && ASSETS.parts[equippedEngine] && (
+              <Image 
+                source={ASSETS.parts[equippedEngine]} 
+                style={[styles.robotLayer, { zIndex: 20 }]} 
+                resizeMode="contain" 
+              />
+            )}
+            {equippedWeapon && ASSETS.parts[equippedWeapon] && (
+              <Image 
+                source={ASSETS.parts[equippedWeapon]} 
+                style={[styles.robotLayer, { zIndex: 40, top: getWeaponOffset() }]} 
+                resizeMode="contain" 
+              />
+            )}
+          </View>
+          <Text style={styles.playerLabel}>{playerName}</Text>
+          <View style={styles.healthBar}>
+            <View style={[styles.healthFill, { width: `${Math.max(0, playerHPPercent)}%`, backgroundColor: playerHP > 0 ? "#27AE60" : "#E74C3C" }]} />
+          </View>
+          <Text style={styles.healthText}>{Math.max(0, playerHP)} / {playerMaxHP}</Text>
+        </View>
+
+        {/* BATTLE RESULT OVERLAY */}
+        {battleEnded && (
+          <View style={styles.resultOverlay}>
+            <View style={styles.resultBox}>
+              <Text style={[styles.resultTitle, winner === 'player' ? styles.victoryText : styles.defeatText]}>
+                {winner === 'player' ? 'VICTORY!' : 'DEFEAT!'}
+              </Text>
+              <Text style={styles.resultMessage}>
+                {winner === 'player' ? 'You defeated the enemy!' : 'You were defeated...'}
+              </Text>
+              <TouchableOpacity style={styles.resultButton} onPress={() => {
+                setBattleEnded(false);
+                setWinner(null);
+                setPlayerHP(playerMaxHP);
+                setEnemyHP(enemyMaxHP);
+                setBattleLog(['Battle Started!']);
+              }}>
+                <Text style={styles.resultButtonText}>Battle Again</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
       </View>
 
-      {/* PLAYER (Bottom Left above skills) - Using equipped loadout */}
-      <View style={styles.playerContainer}>
-        <View style={styles.robotStage}>
-          {equippedWheels && ASSETS.parts[equippedWheels] && (
-            <Image 
-              source={ASSETS.parts[equippedWheels]} 
-              style={[styles.robotLayer, { zIndex: 30 }]} 
-              resizeMode="contain" 
-            />
-          )}
-          {equippedChassis && ASSETS.parts[equippedChassis] && (
-            <Image 
-              source={ASSETS.parts[equippedChassis]} 
-              style={[styles.robotLayer, { zIndex: 10 }]} 
-              resizeMode="contain" 
-            />
-          )}
-          {equippedEngine && ASSETS.parts[equippedEngine] && (
-            <Image 
-              source={ASSETS.parts[equippedEngine]} 
-              style={[styles.robotLayer, { zIndex: 20 }]} 
-              resizeMode="contain" 
-            />
-          )}
-          {equippedWeapon && ASSETS.parts[equippedWeapon] && (
-            <Image 
-              source={ASSETS.parts[equippedWeapon]} 
-              style={[styles.robotLayer, { zIndex: 40, top: getWeaponOffset() }]} 
-              resizeMode="contain" 
-            />
-          )}
-        </View>
-        <View style={styles.healthBar}>
-          <View style={[styles.healthFill, { width: "90%" }]} />
-        </View>
-        <Text style={styles.healthLabel}>Player</Text>
-      </View>
-
-      {/* SKILL BOX */}
+      {/* ATTACK BUTTONS - BOTTOM 4-BUTTON GRID */}
       <View style={styles.skillBox}>
         <View style={styles.skillRow}>
-          <TouchableOpacity style={styles.skillButton}>
+          <TouchableOpacity 
+            style={[styles.skillButton, battleEnded || isAttacking ? styles.skillButtonDisabled : {}]}
+            onPress={() => handleAttack(0)}
+            disabled={battleEnded || isAttacking}
+          >
             <Text style={styles.skillText}>Basic</Text>
+            <Text style={styles.skillDamage}>{weaponStats.attacks[0]?.damage.min}-{weaponStats.attacks[0]?.damage.max}</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.skillButton}>
+          <TouchableOpacity 
+            style={[styles.skillButton, battleEnded || isAttacking ? styles.skillButtonDisabled : {}]}
+            onPress={() => handleAttack(1)}
+            disabled={battleEnded || isAttacking}
+          >
             <Text style={styles.skillText}>Skill 1</Text>
+            <Text style={styles.skillDamage}>{weaponStats.attacks[1]?.damage.min}-{weaponStats.attacks[1]?.damage.max}</Text>
           </TouchableOpacity>
         </View>
-
         <View style={styles.skillRow}>
-          <TouchableOpacity style={styles.skillButton}>
+          <TouchableOpacity 
+            style={[styles.skillButton, battleEnded || isAttacking ? styles.skillButtonDisabled : {}]}
+            disabled={battleEnded || isAttacking}
+          >
             <Text style={styles.skillText}>Skill 2</Text>
+            <Text style={styles.skillDamage}>Coming Soon</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.skillButton}>
+          <TouchableOpacity 
+            style={[styles.skillButton, battleEnded || isAttacking ? styles.skillButtonDisabled : {}]}
+            disabled={battleEnded || isAttacking}
+          >
             <Text style={styles.skillText}>Skill 3</Text>
+            <Text style={styles.skillDamage}>Coming Soon</Text>
           </TouchableOpacity>
         </View>
       </View>
 
-    </SafeAreaView>
+    </ImageBackground>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#EFEFEF",
+  },
+
+  /* MAIN BATTLE ARENA */
+  arenaContainer: {
+    flex: 1,
+    position: 'relative',
+    paddingHorizontal: 12,
+    paddingVertical: 16,
   },
 
   /* ENEMY TOP RIGHT */
   enemyContainer: {
+    position: 'absolute',
+    top: 20,
+    right: 20,
     alignItems: "center",
-    position: "absolute",
-    top: 50,
-    right: 25,
+    zIndex: 10,
+  },
+  enemyLabel: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#FF3B30',
+    marginBottom: 4,
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 3,
   },
   enemyImg: {
-    width: 135,
-    height: 135,
+    width: 120,
+    height: 120,
     resizeMode: "contain",
     marginBottom: 6,
   },
 
-  /* PLAYER BOTTOM LEFT, ABOVE SKILLS */
+  /* PLAYER BOTTOM LEFT */
   playerContainer: {
+    position: 'absolute',
+    bottom: 220,
+    left: 20,
     alignItems: "center",
-    position: "absolute",
-    bottom: 240,
-    left: 25,
+    zIndex: 10,
+  },
+  playerLabel: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#34C759',
+    marginTop: 4,
+    marginBottom: 4,
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 3,
   },
   robotStage: {
-    width: 150,
-    height: 150,
+    width: 180,
+    height: 180,
     justifyContent: 'center',
     alignItems: 'center',
     position: 'relative',
-    marginBottom: 6,
+    marginBottom: 4,
   },
   robotLayer: {
     position: 'absolute',
     width: '100%',
     height: '100%',
   },
-  playerImg: {
-    width: 150,
-    height: 150,
-    resizeMode: "contain",
-    marginBottom: 6,
-  },
 
   /* HEALTH BARS */
   healthBar: {
     width: 130,
-    height: 12,
-    backgroundColor: "#CFCFCF",
-    borderRadius: 6,
+    height: 14,
+    backgroundColor: "rgba(50, 50, 50, 0.8)",
+    borderRadius: 7,
     overflow: "hidden",
+    marginBottom: 3,
+    borderWidth: 2,
+    borderColor: "rgba(255, 255, 255, 0.3)",
   },
   healthFill: {
     height: "100%",
     backgroundColor: "#5CB85C",
   },
-  healthLabel: {
+  healthText: {
     marginTop: 3,
-    fontSize: 13,
-    color: "#444",
+    fontSize: 11,
+    color: "#FFF",
+    fontWeight: 'bold',
+    textShadowColor: 'rgba(0, 0, 0, 0.9)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 3,
   },
 
-  /* SKILL BOX (LIFTED ABOVE BOTTOM BAR) */
+  /* BATTLE RESULT OVERLAY */
+  resultOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 100,
+  },
+  resultBox: {
+    backgroundColor: '#FFF',
+    borderRadius: 20,
+    paddingVertical: 30,
+    paddingHorizontal: 40,
+    alignItems: 'center',
+    borderWidth: 3,
+    borderColor: '#333',
+  },
+  resultTitle: {
+    fontSize: 48,
+    fontWeight: '900',
+    marginBottom: 12,
+  },
+  victoryText: {
+    color: '#27AE60',
+  },
+  defeatText: {
+    color: '#E74C3C',
+  },
+  resultMessage: {
+    fontSize: 16,
+    color: '#333',
+    marginBottom: 20,
+    fontWeight: '600',
+  },
+  resultButton: {
+    backgroundColor: '#3498DB',
+    paddingVertical: 12,
+    paddingHorizontal: 30,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: '#2980B9',
+  },
+  resultButtonText: {
+    color: '#FFF',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+
+  /* SKILL BOX - BOTTOM 4-BUTTON GRID */
   skillBox: {
-    position: "absolute",
+    backgroundColor: "#F5F5F5",
+    borderTopWidth: 2,
+    borderTopColor: "#B4B4B4",
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    position: 'absolute',
     bottom: 40,
-    alignSelf: "center",
+    left: 12,
+    right: 12,
+    borderRadius: 16,
     borderWidth: 2,
     borderColor: "#B4B4B4",
-    borderRadius: 14,
-    paddingVertical: 18,
-    paddingHorizontal: 22,
-    backgroundColor: "#FAFAFA",
+  },
+
+  skillNumberBox: {
+    display: 'none',
+  },
+  skillNumberText: {
+    display: 'none',
   },
 
   skillRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 12,
+    gap: 10,
+    marginBottom: 10,
   },
 
-  /* SKILL BUTTONS (Smaller to avoid collision) */
+  /* SKILL BUTTONS */
   skillButton: {
+    flex: 1,
     backgroundColor: "#D8D8D8",
-    width: 115,   
-    height: 48,  
-    borderRadius: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#999',
     justifyContent: "center",
     alignItems: "center",
-    marginHorizontal: 6,
+    paddingVertical: 14,
+    paddingHorizontal: 8,
+  },
+  skillButtonDisabled: {
+    backgroundColor: "#95A5A6",
+    borderColor: '#7F8C8D',
+    opacity: 0.6,
   },
 
   skillText: {
-    fontWeight: "600",
-    fontSize: 14,
+    fontWeight: "700",
+    fontSize: 12,
     color: "#333",
+  },
+  skillDamage: {
+    fontSize: 9,
+    color: "#666",
+    marginTop: 2,
   },
 });
 
