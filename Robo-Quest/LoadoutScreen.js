@@ -99,7 +99,6 @@ const PART_LISTS = {
 };
 
 const DROPDOWN_OPTIONS = {
-    TierBox: ['Common', 'Rare', 'Legendary'],
     PartBox: ['All', 'Wheels', 'Engines', 'Chassis', 'Weapon'],
     TypeBox: ['All', 'Creativia', 'Generalis', 'Innovare'],
 };
@@ -117,6 +116,7 @@ const DEFAULT_UNLOCKED_PARTS = {
     Wheels: ['WheelsGeneralis'],
     Engines: ['EngineGeneralis'],
 };
+
 const PART_STATS = {
     WeaponCreativia: {
         name: 'Laser Spread',
@@ -242,6 +242,7 @@ const PART_STATS = {
         ]
     }
 };
+
 const SparkAnimation = ({ 
     isActive = false, 
     size = 40, 
@@ -407,6 +408,7 @@ const SparkAnimation = ({
         </View>
     );
 };
+
 const PartStatsModal = ({ isVisible, onClose, partData }) => {
     if (!partData) return null;
 
@@ -451,6 +453,7 @@ const PartStatsModal = ({ isVisible, onClose, partData }) => {
         </Modal>
     );
 };
+
 const DropdownModal = ({ isVisible, onClose, options, onSelect, positionStyle }) => (
     <Modal animationType="fade" transparent={true} visible={isVisible} onRequestClose={onClose}>
         <Pressable style={styles.modalOverlay} onPress={onClose}>
@@ -703,7 +706,6 @@ function LoadoutScreen() {
     });
     
     const [selectedType, setSelectedType] = useState('All');
-    const [selectedTier, setSelectedTier] = useState('Rare');
     const [selectedPartFilter, setSelectedPartFilter] = useState('All');
     const [activeDropdown, setActiveDropdown] = useState(null);
     const [loadout, setLoadout] = useState({ ...DEFAULT_LOADOUT }); 
@@ -717,6 +719,7 @@ function LoadoutScreen() {
     const [showPresetSpark, setShowPresetSpark] = useState(false);
     const [showPartStats, setShowPartStats] = useState(false);
     const [selectedPartData, setSelectedPartData] = useState(null);
+    
     const deletePresetFromFirebase = async (presetName, user) => {
         const userToUse = user || currentUser;
         if (!userToUse) return false;
@@ -1215,7 +1218,6 @@ function LoadoutScreen() {
         if (key === 'TypeBox') {
             setSelectedType(value);
         }
-        if (key === 'TierBox') setSelectedTier(value);
         if (key === 'PartBox') setSelectedPartFilter(value);
         setActiveDropdown(null);
     };
@@ -1356,7 +1358,6 @@ function LoadoutScreen() {
 
             <View style={styles.filterRow}>
                 <FilterBox label="Type" value={selectedType} onPress={() => setActiveDropdown('TypeBox')} />
-                <FilterBox label="Tier" value={selectedTier} onPress={() => setActiveDropdown('TierBox')} />
                 <FilterBox label="Part" value={selectedPartFilter} onPress={() => setActiveDropdown('PartBox')} />
             </View>
 
@@ -1413,19 +1414,6 @@ function LoadoutScreen() {
                     positionStyle={{
                         top: scaleSize(320),
                         left: scaleSize(20),
-                        zIndex: 1000,
-                    }}
-                />
-            )}
-            {activeDropdown === 'TierBox' && (
-                <DropdownModal
-                    isVisible={true} 
-                    onClose={() => setActiveDropdown(null)}
-                    options={DROPDOWN_OPTIONS.TierBox} 
-                    onSelect={(v) => handleSelectFilter('TierBox', v)}
-                    positionStyle={{
-                        top: scaleSize(320),
-                        left: SCREEN_WIDTH / 2 - scaleSize(70),
                         zIndex: 1000,
                     }}
                 />

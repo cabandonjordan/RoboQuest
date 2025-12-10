@@ -26,18 +26,60 @@ const PANEL_DARK_BG = '#2A3439';
 const CIRCLE_BG_COLOR = 'rgba(255, 255, 255, 0.2)'; 
 const ICON_SIZE = 30; 
 const CONTAINER_SIZE = 45; 
-const HEADER_COLOR = '#2A2A2A'; // Gray color for header
+const HEADER_COLOR = '#2A2A2A';
 
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-const scaleSize = (size) => {
-    const scaleFactor = SCREEN_WIDTH / 375; 
+
+// RESPONSIVE FUNCTIONS - ADDED FOR RESPONSIVENESS ONLY
+const responsiveScale = (size) => {
+    // Base width for iPhone X/11/12/13
+    const baseWidth = 375;
+    const scaleFactor = SCREEN_WIDTH / baseWidth;
+    
+    // For very small screens (iPhone SE)
+    if (SCREEN_WIDTH < 350) {
+        return Math.round(size * scaleFactor * 0.9);
+    }
+    // For large screens (iPhone Plus/Pro Max, tablets)
+    if (SCREEN_WIDTH > 414) {
+        return Math.round(size * scaleFactor * 1.05);
+    }
     return Math.round(size * scaleFactor);
 };
 
-const scaleFont = (size) => {
-    const scaleFactor = SCREEN_WIDTH / 375;
+const responsiveFont = (size) => {
+    const baseWidth = 375;
+    const scaleFactor = SCREEN_WIDTH / baseWidth;
+    
+    if (SCREEN_WIDTH < 350) {
+        return Math.round(size * scaleFactor * 0.85);
+    }
+    if (SCREEN_WIDTH > 414) {
+        return Math.round(size * scaleFactor * 1.1);
+    }
     return Math.round(size * scaleFactor);
+};
+
+const responsiveSpacing = (size) => {
+    const baseWidth = 375;
+    const scaleFactor = SCREEN_WIDTH / baseWidth;
+    
+    if (SCREEN_WIDTH < 350) {
+        return Math.round(size * scaleFactor * 0.9);
+    }
+    if (SCREEN_WIDTH > 414) {
+        return Math.round(size * scaleFactor * 1.05);
+    }
+    return Math.round(size * scaleFactor);
+};
+
+const scaleSize = (size) => {
+    return responsiveScale(size);
+};
+
+const scaleFont = (size) => {
+    return responsiveFont(size);
 };
 
 // Icons and Parts
@@ -167,17 +209,17 @@ const SparkAnimation = ({
 
     const getSparkPosition = (index) => {
         const angle = (index / count) * Math.PI * 2;
-        let radius = size * 1.2;
+        let radius = scaleSize(size) * 1.2; 
         switch(position) {
             case 'top':
                 const topAngle = (index / count) * Math.PI; 
-                const topRadius = size * 1.5;
+                const topRadius = scaleSize(size) * 1.5; 
                 return {
                     left: topRadius * Math.cos(topAngle),
                     top: -topRadius * 0.8, 
                 };
             case 'back':
-                const backRadius = size * 1.8;
+                const backRadius = scaleSize(size) * 1.8; 
                 return {
                     left: backRadius * Math.cos(angle),
                     top: backRadius * Math.sin(angle) * 0.5, 
@@ -185,14 +227,14 @@ const SparkAnimation = ({
             case 'left':
                 const leftAngle = (index / count) * Math.PI * 1.5; 
                 return {
-                    left: -size * 1.5,
-                    top: size * Math.sin(leftAngle) * 0.8,
+                    left: -scaleSize(size) * 1.5, 
+                    top: scaleSize(size) * Math.sin(leftAngle) * 0.8, 
                 };
             case 'right':
                 const rightAngle = (index / count) * Math.PI * 1.5; 
                 return {
-                    left: size * 1.5,
-                    top: size * Math.sin(rightAngle) * 0.8,
+                    left: scaleSize(size) * 1.5, 
+                    top: scaleSize(size) * Math.sin(rightAngle) * 0.8, 
                 };
             default: 
                 return {
@@ -236,9 +278,9 @@ const SparkAnimation = ({
                         {
                             backgroundColor: color,
                             opacity: opacity,
-                            width: size / 4,
-                            height: size / 4,
-                            borderRadius: size / 8,
+                            width: scaleSize(size / 4), 
+                            height: scaleSize(size / 4), 
+                            borderRadius: scaleSize(size / 8), 
                             transform: [
                                 { translateX },
                                 { translateY },
@@ -252,8 +294,13 @@ const SparkAnimation = ({
         });
     };
 
+    const responsiveSize = scaleSize(size); 
+    
     return (
-        <View style={[styles.sparkContainer, { width: size * 3, height: size * 3 }, style]}>
+        <View style={[styles.sparkContainer, { 
+            width: responsiveSize * 3, 
+            height: responsiveSize * 3 
+        }, style]}>
             {renderSparks()}
             {isActive && (
                 <Animated.View
@@ -261,9 +308,9 @@ const SparkAnimation = ({
                         styles.centerGlow,
                         {
                             backgroundColor: color,
-                            width: size * 0.8,
-                            height: size * 0.8,
-                            borderRadius: size * 0.4,
+                            width: responsiveSize * 0.8,
+                            height: responsiveSize * 0.8,
+                            borderRadius: responsiveSize * 0.4,
                             opacity: opacities.current[0] || 0,
                         },
                     ]}
@@ -320,7 +367,7 @@ const CameraScreenButton = ({ navigation }) => {
 const QuestList = ({ show, slideAnim, questIconLayout }) => {
     if (!show || !questIconLayout) return null; 
 
-    const topPosition = questIconLayout.y + questIconLayout.height + scaleSize(5); 
+    const topPosition = questIconLayout.y + questIconLayout.height + responsiveSpacing(5); 
     const questListWidth = SCREEN_WIDTH * 0.90;
     const questListOffset = (SCREEN_WIDTH / 2) - (questListWidth / 2);
     
@@ -328,7 +375,7 @@ const QuestList = ({ show, slideAnim, questIconLayout }) => {
         transform: [{
             translateX: slideAnim.interpolate({
                 inputRange: [0, 1],
-                outputRange: [-questListWidth, questListOffset - scaleSize(20)], 
+                outputRange: [-questListWidth, questListOffset - responsiveSpacing(20)], 
             }),
         }],
         top: topPosition,
@@ -383,21 +430,21 @@ const RobotPreview = ({ loadout }) => {
         if (!chassis || !weapon) return 0;
 
         if (chassis === "ChassisInnovare") {
-            if (weapon === "WeaponCreativia") return scaleSize(13);
-            if (weapon === "WeaponGeneralis") return scaleSize(8);
+            if (weapon === "WeaponCreativia") return responsiveSpacing(13); 
+            if (weapon === "WeaponGeneralis") return responsiveSpacing(8); 
             if (weapon === "WeaponInnovare") return 0;
         }
 
         if (chassis === "ChassisGeneralis") {
-            if (weapon === "WeaponCreativia") return scaleSize(6);
+            if (weapon === "WeaponCreativia") return responsiveSpacing(6); 
             if (weapon === "WeaponGeneralis") return 0;
-            if (weapon === "WeaponInnovare") return scaleSize(-6);
+            if (weapon === "WeaponInnovare") return responsiveSpacing(-6); 
         }
     
         if (chassis === "ChassisCreativia") {
             if (weapon === "WeaponCreativia") return 0;
-            if (weapon === "WeaponGeneralis") return scaleSize(-5);
-            if (weapon === "WeaponInnovare") return scaleSize(-11);
+            if (weapon === "WeaponGeneralis") return responsiveSpacing(-5); 
+            if (weapon === "WeaponInnovare") return responsiveSpacing(-11); 
         }
 
         return 0;
@@ -426,10 +473,10 @@ const RobotPreview = ({ loadout }) => {
                 activeOpacity={1}
             >
                 <View style={styles.robotStage}>
-                    <Text style={{ color: LIGHT_BLUE, fontSize: scaleFont(16), textAlign: 'center' }}>
+                    <Text style={{ color: LIGHT_BLUE, fontSize: responsiveFont(16), textAlign: 'center' }}> // RESPONSIVE FONT
                         No robot configured
                     </Text>
-                    <Text style={{ color: LIGHT_GREY, fontSize: scaleFont(12), textAlign: 'center', marginTop: scaleSize(10) }}>
+                    <Text style={{ color: LIGHT_GREY, fontSize: responsiveFont(12), textAlign: 'center', marginTop: responsiveSpacing(10) }}> // RESPONSIVE FONT & SPACING
                         Go to Loadout to customize your robot
                     </Text>
                 </View>
@@ -437,50 +484,50 @@ const RobotPreview = ({ loadout }) => {
         );
     }
 
-    const robotSize = {
-        width: SCREEN_WIDTH * 0.8,
-        height: SCREEN_WIDTH * 0.8
-    };
+    // RESPONSIVE ROBOT SIZE
+    const robotWidth = SCREEN_WIDTH * (SCREEN_WIDTH < 350 ? 0.75 : SCREEN_WIDTH > 414 ? 0.85 : 0.8);
+    const robotHeight = robotWidth;
+    
     const getSparkStyle = (position) => {
-        const robotCenterX = robotSize.width / 2;
-        const robotCenterY = robotSize.height / 2;
+        const robotCenterX = robotWidth / 2;
+        const robotCenterY = robotHeight / 2;
         
         switch(position) {
             case 'top':
                 return {
                     position: 'absolute',
-                    top: -robotSize.height * 0.15,
-                    left: robotCenterX - 45,
+                    top: -robotHeight * 0.15,
+                    left: robotCenterX - responsiveSpacing(45), 
                 };
             case 'back':
                 return {
                     position: 'absolute',
-                    top: robotCenterY - 30,
-                    left: robotSize.width * 0.15,
+                    top: robotCenterY - responsiveSpacing(30), 
+                    left: robotWidth * 0.15,
                 };
             case 'center':
                 return {
                     position: 'absolute',
-                    top: robotCenterY - 45,
-                    left: robotCenterX - 45,
+                    top: robotCenterY - responsiveSpacing(45), 
+                    left: robotCenterX - responsiveSpacing(45), 
                 };
             case 'left':
                 return {
                     position: 'absolute',
-                    top: robotCenterY - 45,
-                    left: -45,
+                    top: robotCenterY - responsiveSpacing(45), 
+                    left: -responsiveSpacing(45), 
                 };
             case 'right':
                 return {
                     position: 'absolute',
-                    top: robotCenterY - 45,
-                    left: robotSize.width - 45,
+                    top: robotCenterY - responsiveSpacing(45), 
+                    left: robotWidth - responsiveSpacing(45), 
                 };
             default:
                 return {
                     position: 'absolute',
-                    top: robotCenterY - 45,
-                    left: robotCenterX - 45,
+                    top: robotCenterY - responsiveSpacing(45), 
+                    left: robotCenterX - responsiveSpacing(45), 
                 };
         }
     };
@@ -491,7 +538,7 @@ const RobotPreview = ({ loadout }) => {
             onPress={handleRobotTap}
             activeOpacity={1}
         >
-            <View style={[styles.robotStage, { width: robotSize.width, height: robotSize.height }]}>
+            <View style={[styles.robotStage, { width: robotWidth, height: robotHeight }]}>
                 {equippedWheels && (
                     <Image 
                         source={ASSETS.parts[equippedWheels]} 
@@ -823,24 +870,24 @@ const questListStyles = StyleSheet.create({
     container: {
         position: 'absolute',
         backgroundColor: PANEL_DARK_BG,
-        borderRadius: scaleSize(8),
-        padding: scaleSize(10),
+        borderRadius: responsiveScale(8), 
+        padding: responsiveScale(10), 
         zIndex: 100, 
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: scaleSize(2) },
+        shadowOffset: { width: 0, height: responsiveScale(2) }, 
         shadowOpacity: 0.5,
-        shadowRadius: scaleSize(5),
+        shadowRadius: responsiveScale(5), 
         elevation: 10,
     },
     item: {
-        paddingVertical: scaleSize(8),
-        paddingHorizontal: scaleSize(5),
+        paddingVertical: responsiveScale(8), 
+        paddingHorizontal: responsiveScale(5), 
         borderBottomWidth: 1,
         borderBottomColor: ACCENT_GREY,
     },
     text: {
         color: LIGHT_GREY,
-        fontSize: scaleFont(16),
+        fontSize: responsiveFont(16), 
         fontWeight: '600',
         textAlign: 'left',
     },
@@ -861,28 +908,28 @@ const styles = StyleSheet.create({
         width: '100%',
         height: '100%',
         justifyContent: 'space-between',
-        paddingVertical: scaleSize(-1),
-        marginTop: scaleSize(80), 
+        paddingVertical: responsiveScale(-1), 
+        marginTop: responsiveSpacing(80), 
     },
     
     // Gray Header Styles 
     headerContainer: {
         position: 'absolute',
-        top: scaleSize(10), 
+        top: responsiveSpacing(10), 
         left: 0,
         right: 0,
-        height: scaleSize(90), 
+        height: responsiveSpacing(90), 
         backgroundColor: HEADER_COLOR,
         zIndex: 100,
         borderBottomWidth: 1,
         borderBottomColor: '#3A3A3A',
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
+        shadowOffset: { width: 0, height: responsiveScale(2) }, 
         shadowOpacity: 0.3,
-        shadowRadius: 3,
+        shadowRadius: responsiveScale(3), 
         elevation: 5,
-        borderRadius: scaleSize(10), 
-        paddingHorizontal: scaleSize(15), 
+        borderRadius: responsiveScale(10), 
+        paddingHorizontal: responsiveSpacing(15), 
     },
     headerIconsContainer: {
         flexDirection: 'row',
@@ -901,7 +948,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     iconSpacer: {
-        width: scaleSize(15), 
+        width: responsiveSpacing(15), 
     },
     
     sparkContainer: {
@@ -918,26 +965,26 @@ const styles = StyleSheet.create({
     
     // TOP ICON BUTTON STYLES 
     topIconButton: {
-        width: scaleSize(60), 
-        height: scaleSize(60), 
-        borderRadius: scaleSize(25),
+        width: responsiveScale(50), 
+        height: responsiveScale(50), 
+        borderRadius: responsiveScale(25), 
         backgroundColor: 'rgba(255, 255, 255, 0.1)',
         justifyContent: 'center',
         alignItems: 'center',
-        borderWidth: 2,
+        borderWidth: responsiveScale(2), 
         borderColor: 'rgba(255, 255, 255, 0.2)',
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: scaleSize(2) },
+        shadowOffset: { width: 0, height: responsiveScale(2) }, 
         shadowOpacity: 0.2,
-        shadowRadius: scaleSize(3),
+        shadowRadius: responsiveScale(3), 
     },
     topIconButtonActive: {
         backgroundColor: 'rgba(0, 191, 255, 0.2)',
         borderColor: LIGHT_BLUE,
     },
     topIconImage: {
-        width: scaleSize(26), 
-        height: scaleSize(26), 
+        width: responsiveScale(26), 
+        height: responsiveScale(26), 
         tintColor: LIGHT_BLUE,
     },
     
@@ -945,22 +992,22 @@ const styles = StyleSheet.create({
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        marginTop: scaleSize(-30),
+        marginTop: responsiveScale(-30), 
         zIndex: 1,
     },
     
     robotPreviewContainer: {
         alignItems: 'center',
         justifyContent: 'center',
-        marginBottom: scaleSize(-100),
+        marginBottom: responsiveScale(-80), 
         zIndex: 1,
         position: 'relative',
     },
     robotStage: {
         width: SCREEN_WIDTH * 0.8,
         height: SCREEN_WIDTH * 0.8,
-        maxWidth: scaleSize(350),
-        maxHeight: scaleSize(350),
+        maxWidth: responsiveScale(350), 
+        maxHeight: responsiveScale(350), 
         justifyContent: 'center',
         alignItems: 'center',
         position: 'relative',
@@ -983,8 +1030,8 @@ const styles = StyleSheet.create({
         justifyContent: 'space-around',
         width: '80%',
         alignSelf: 'center',
-        marginBottom: scaleSize(1),
-        paddingHorizontal: scaleSize(.1),
+        marginBottom: responsiveScale(1),
+        paddingHorizontal: responsiveScale(.1), 
         zIndex: 10,
     },
     bottomActionButtonsContainer: { 
@@ -992,26 +1039,26 @@ const styles = StyleSheet.create({
         justifyContent: 'space-around',
         width: '110%',
         alignSelf: 'center',
-        marginBottom: scaleSize(90),
-        paddingHorizontal: scaleSize(.1),
+        marginBottom: responsiveScale(90), 
+        paddingHorizontal: responsiveScale(.1), 
         zIndex: 10,
     },
     actionButton: {
         width: SCREEN_WIDTH * 0.30,
-        height: scaleSize(35),
-        borderRadius: scaleSize(20),
+        height: responsiveScale(35), 
+        borderRadius: responsiveScale(20), 
         backgroundColor: Transparent_BG,
         justifyContent: 'center',
         alignItems: 'center',
     },
     actionIcon: {
-        width: scaleSize(30),
-        height: scaleSize(30),
+        width: responsiveScale(25), 
+        height: responsiveScale(25), 
         tintColor: LIGHT_BLUE,
-        marginBottom: scaleSize(3),
+        marginBottom: responsiveScale(3), 
     },
     actionLabel: {
-        fontSize: scaleFont(9),
+        fontSize: responsiveFont(8), 
         fontWeight: 'bold',
         color: LIGHT_BLUE,
         textAlign: 'center',
@@ -1020,13 +1067,13 @@ const styles = StyleSheet.create({
     // Camera Button Styles
     cameraButtonOuterContainer: {
         alignItems: 'center',
-        marginBottom: scaleSize(.2),
-        marginTop: scaleSize(10),
+        marginBottom: responsiveScale(-6), 
+        marginTop: responsiveScale(10), 
         zIndex: 10,
     },
     cameraButton: {
         width: SCREEN_WIDTH * 0.3,
-        height: scaleSize(55),
+        height: responsiveScale(55), 
         backgroundColor: Transparent_BG,
         justifyContent: 'center',
         alignItems: 'center',
@@ -1034,14 +1081,14 @@ const styles = StyleSheet.create({
         overflow: 'hidden',
     },
     cameraIcon: {
-        width: scaleSize(35),
-        height: scaleSize(35),
+        width: responsiveScale(35), 
+        height: responsiveScale(35), 
         tintColor: LIGHT_BLUE,
-        marginBottom: scaleSize(1),
+        marginBottom: responsiveScale(1), 
         zIndex: 10,
     },
     cameraLabel: {
-        fontSize: scaleFont(9),
+        fontSize: responsiveFont(9), 
         fontWeight: 'bold',
         color: LIGHT_BLUE,
         zIndex: 10,
@@ -1052,11 +1099,11 @@ const styles = StyleSheet.create({
         position: 'absolute',
         bottom: 0,
         left: 0,
-        width: scaleSize(20),
-        height: scaleSize(20),
+        width: responsiveScale(20), 
+        height: responsiveScale(20), 
         backgroundColor: Transparent_BG,
-        borderBottomWidth: scaleSize(3),
-        borderLeftWidth: scaleSize(3),
+        borderBottomWidth: responsiveScale(3), 
+        borderLeftWidth: responsiveScale(3), 
         borderColor: Indent_Color,
         zIndex: 1,
     },
@@ -1064,11 +1111,11 @@ const styles = StyleSheet.create({
         position: 'absolute',
         top: 0,
         right: 0,
-        width: scaleSize(20),
-        height: scaleSize(20),
+        width: responsiveScale(20), 
+        height: responsiveScale(20), 
         backgroundColor: Transparent_BG,
-        borderTopWidth: scaleSize(3),
-        borderRightWidth: scaleSize(3),
+        borderTopWidth: responsiveScale(3), 
+        borderRightWidth: responsiveScale(3), 
         borderColor: Indent_Color,
         zIndex: 1,
     },
@@ -1076,11 +1123,11 @@ const styles = StyleSheet.create({
         position: 'absolute',
         bottom: 0,
         right: 0,
-        width: scaleSize(20),
-        height: scaleSize(20),
+        width: responsiveScale(20), 
+        height: responsiveScale(20), 
         backgroundColor: Transparent_BG,
-        borderBottomWidth: scaleSize(3),
-        borderRightWidth: scaleSize(3),
+        borderBottomWidth: responsiveScale(3), 
+        borderRightWidth: responsiveScale(3), 
         borderColor: Indent_Color,
         zIndex: 1,
     },
@@ -1088,11 +1135,11 @@ const styles = StyleSheet.create({
         position: 'absolute',
         top: 0,
         left: 0,
-        width: scaleSize(20),
-        height: scaleSize(20),
+        width: responsiveScale(20), 
+        height: responsiveScale(20), 
         backgroundColor: Transparent_BG,
-        borderTopWidth: scaleSize(3),
-        borderLeftWidth: scaleSize(3),
+        borderTopWidth: responsiveScale(3), 
+        borderLeftWidth: responsiveScale(3), 
         borderColor: Indent_Color,
         zIndex: 1,
     },
