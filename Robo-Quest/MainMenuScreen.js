@@ -14,6 +14,7 @@ import {
 } from 'react-native'; 
 import { useNavigation, useIsFocused } from '@react-navigation/native';
 import { auth, db, doc, getDoc, onAuthStateChanged } from './database/firebase';
+import { useAudio } from './contexts/AudioContext';
 
 // Color Used are in Hex and Rgba formats
 const Indent_Color = '#06DFDE';
@@ -322,10 +323,17 @@ const SparkAnimation = ({
 
 // Action Panel Button Component
 const ActionPanelButton = ({ iconSource, label, onPress }) => {
+    const { playButtonSound } = useAudio();
+    
+    const handlePress = () => {
+        playButtonSound();
+        if (onPress) onPress();
+    };
+    
     return (
         <TouchableOpacity 
             style={styles.actionButton} 
-            onPress={onPress}
+            onPress={handlePress}
         >
             <Image 
                 source={iconSource}
@@ -339,13 +347,18 @@ const ActionPanelButton = ({ iconSource, label, onPress }) => {
 
 // Camera Screen Button Component
 const CameraScreenButton = ({ navigation }) => {
+    const { playButtonSound } = useAudio();
+    
+    const handlePress = () => {
+        playButtonSound();
+        navigation.navigate('Camera');
+    };
+    
     return (
         <View style={styles.cameraButtonOuterContainer}>
             <TouchableOpacity 
                 style={styles.cameraButton} 
-                onPress={() => {
-                    navigation.navigate('Camera');
-                }}
+                onPress={handlePress}
             >
                 <View style={styles.cameraAccentTopRight} />
                 <View style={styles.cameraAccentBottomLeft} />
@@ -396,13 +409,20 @@ const QuestList = ({ show, slideAnim, questIconLayout }) => {
 };
 
 const SimpleTopIconButton = ({ iconSource, onPress, isQuest = false, isActive = false, refProp = null }) => {
+    const { playButtonSound } = useAudio();
+    
+    const handlePress = () => {
+        playButtonSound();
+        if (onPress) onPress();
+    };
+    
     return (
         <TouchableOpacity 
             style={[
                 styles.topIconButton,
                 isActive && styles.topIconButtonActive
             ]} 
-            onPress={onPress}
+            onPress={handlePress}
             ref={refProp}
             activeOpacity={0.7}
         >

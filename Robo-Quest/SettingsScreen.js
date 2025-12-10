@@ -11,33 +11,15 @@ import { useNavigation } from '@react-navigation/native';
 import Slider from '@react-native-community/slider';
 import { Audio } from 'expo-av';
 import BackgroundMusicManager from './services/BackgroundMusicManager';
+import { useAudio } from './contexts/AudioContext';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-// Function to play button sound effect
-const playButtonSound = async (sfxEnabled = true, volume = 0.5) => {
-  if (!sfxEnabled) return; // Don't play if SFX is disabled
+function BlueButton({ children, style, onPress }) {
+  const { playButtonSound } = useAudio();
   
-  try {
-    const { sound } = await Audio.Sound.createAsync(
-      require('./assets/music/button_sfx.mp3')
-    );
-    await sound.setVolumeAsync(volume); // Set the volume
-    await sound.playAsync();
-    // Unload sound after playing to free memory
-    sound.setOnPlaybackStatusUpdate((status) => {
-      if (status.didJustFinish) {
-        sound.unloadAsync();
-      }
-    });
-  } catch (error) {
-    console.log('Error playing button sound:', error);
-  }
-};
-
-function BlueButton({ children, style, onPress, sfxEnabled, sfxVolume }) {
   const handlePress = () => {
-    playButtonSound(sfxEnabled, sfxVolume);
+    playButtonSound();
     if (onPress) onPress();
   };
 
@@ -50,17 +32,32 @@ function BlueButton({ children, style, onPress, sfxEnabled, sfxVolume }) {
 
 function SettingsScreen() {
   const navigation = useNavigation();
+  const { 
+    musicEnabled, 
+    setMusicEnabled, 
+    sfxEnabled, 
+    setSfxEnabled, 
+    musicVolume, 
+    setMusicVolume, 
+    sfxVolume, 
+    setSfxVolume,
+    playButtonSound
+  } = useAudio();
+  
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [vibrationsEnabled, setVibrationsEnabled] = useState(false);
   const [showAudioModal, setShowAudioModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [musicEnabled, setMusicEnabled] = useState(true);
-  const [sfxEnabled, setSfxEnabled] = useState(true);
-  const [musicVolume, setMusicVolume] = useState(0.7);
-  const [sfxVolume, setSfxVolume] = useState(0.5);
+  const isInitialMount = useRef(true);
 
   // Control background music playback based on musicEnabled state
+  // Skip on initial mount to avoid restarting music when opening settings
   useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+    
     if (musicEnabled) {
       BackgroundMusicManager.playMusic();
     } else {
@@ -74,7 +71,7 @@ function SettingsScreen() {
   }, [musicVolume]);
 
   const handleClose = () => {
-    playButtonSound(sfxEnabled, sfxVolume);
+    playButtonSound();
     navigation.goBack();
   };
 
@@ -83,7 +80,7 @@ function SettingsScreen() {
   };
 
   const handleCloseAudioModal = () => {
-    playButtonSound(sfxEnabled, sfxVolume);
+    playButtonSound();
     setShowAudioModal(false);
   };
 
@@ -92,12 +89,12 @@ function SettingsScreen() {
   };
 
   const handleCloseDeleteModal = () => {
-    playButtonSound(sfxEnabled, sfxVolume);
+    playButtonSound();
     setShowDeleteModal(false);
   };
 
   const handleConfirmDelete = () => {
-    playButtonSound(sfxEnabled, sfxVolume);
+    playButtonSound();
     console.log('Account deletion confirmed');
     // Add actual account deletion logic here
     setShowDeleteModal(false);
@@ -116,13 +113,13 @@ function SettingsScreen() {
         <View style={styles.modalContent}>
 
           <View style={styles.gridRow}>
-            <BlueButton style={styles.gridItem} onPress={handleAudioPress} sfxEnabled={sfxEnabled} sfxVolume={sfxVolume}>Audio</BlueButton>
-            <BlueButton style={styles.gridItem} sfxEnabled={sfxEnabled} sfxVolume={sfxVolume}>English</BlueButton>
+            <BlueButton style={styles.gridItem} onPress={handleAudioPress}>Audio</BlueButton>
+            <BlueButton style={styles.gridItem}>English</BlueButton>
           </View>
 
           <View style={styles.gridRow}>
-            <BlueButton style={styles.gridItem} sfxEnabled={sfxEnabled} sfxVolume={sfxVolume}>Change Name</BlueButton>
-            <TouchableOpacity style={[styles.blueButton, styles.gridItem, styles.deleteButton]} onPress={() => { playButtonSound(sfxEnabled, sfxVolume); handleDeletePress(); }} activeOpacity={0.8}>
+            <BlueButton style={styles.gridItem}>Change Name</BlueButton>
+            <TouchableOpacity style={[styles.blueButton, styles.gridItem, styles.deleteButton]} onPress={() => { playButtonSound(); handleDeletePress(); }} activeOpacity={0.8}>
               <Text style={styles.blueButtonText}>Delete Account</Text>
             </TouchableOpacity>
           </View>
@@ -130,12 +127,12 @@ function SettingsScreen() {
           <View style={styles.spacer} />
 
           <View style={styles.gridRowSmall}>
-            <BlueButton style={styles.helpItem} sfxEnabled={sfxEnabled} sfxVolume={sfxVolume}>Terms of Service</BlueButton>
-            <BlueButton style={styles.helpItem} sfxEnabled={sfxEnabled} sfxVolume={sfxVolume}>Privacy Policy</BlueButton>
+            <BlueButton style={styles.helpItem}>Terms of Service</BlueButton>
+            <BlueButton style={styles.helpItem}>Privacy Policy</BlueButton>
           </View>
 
           <View style={styles.bottomRow}>
-            <TouchableOpacity style={styles.grayButton} onPress={() => playButtonSound(sfxEnabled, sfxVolume)}><Text style={styles.grayText}>Credits</Text></TouchableOpacity>
+            <TouchableOpacity style={styles.grayButton} onPress={() => playButtonSound()}><Text style={styles.grayText}>Credits</Text></TouchableOpacity>
           </View>
           
         </View>
@@ -157,7 +154,7 @@ function SettingsScreen() {
                 <Text style={styles.audioLabel}>Music</Text>
                 <TouchableOpacity
                   style={[styles.toggleButton, musicEnabled && styles.toggleButtonOn]}
-                  onPress={() => { playButtonSound(sfxEnabled, sfxVolume); setMusicEnabled(!musicEnabled); }}
+                  onPress={() => { playButtonSound(); setMusicEnabled(!musicEnabled); }}
                 >
                   <Text style={styles.toggleText}>{musicEnabled ? 'ON' : 'OFF'}</Text>
                 </TouchableOpacity>
@@ -168,7 +165,7 @@ function SettingsScreen() {
                 <Text style={styles.audioLabel}>SFX</Text>
                 <TouchableOpacity
                   style={[styles.toggleButton, sfxEnabled && styles.toggleButtonOn]}
-                  onPress={() => { playButtonSound(sfxEnabled, sfxVolume); setSfxEnabled(!sfxEnabled); }}
+                  onPress={() => { playButtonSound(); setSfxEnabled(!sfxEnabled); }}
                 >
                   <Text style={styles.toggleText}>{sfxEnabled ? 'ON' : 'OFF'}</Text>
                 </TouchableOpacity>
