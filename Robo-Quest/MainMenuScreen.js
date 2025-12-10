@@ -9,7 +9,8 @@ import {
     Animated, 
     Dimensions, 
     ImageBackground,
-    Easing
+    Easing,
+    StatusBar
 } from 'react-native'; 
 import { useNavigation, useIsFocused } from '@react-navigation/native';
 import { auth, db, doc, getDoc, onAuthStateChanged } from './database/firebase';
@@ -25,6 +26,7 @@ const PANEL_DARK_BG = '#2A3439';
 const CIRCLE_BG_COLOR = 'rgba(255, 255, 255, 0.2)'; 
 const ICON_SIZE = 30; 
 const CONTAINER_SIZE = 45; 
+const HEADER_COLOR = '#2A2A2A'; // Gray color for header
 
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -627,6 +629,36 @@ const BlinkingLightAnimation = ({ isVisible }) => {
     );
 };
 
+// Gray Header Component
+const GrayHeader = ({ onQuestPress, onShopPress, onSettingsPress, showQuestList, questIconRef }) => {
+    return (
+        <View style={styles.headerContainer}>
+            <View style={styles.headerIconsContainer}>
+                <View style={styles.headerLeft}>
+                    <SimpleTopIconButton 
+                        iconSource={ICONS.quest}
+                        onPress={onQuestPress}
+                        isQuest={true}
+                        isActive={showQuestList}
+                        refProp={questIconRef}
+                    />
+                </View>
+                <View style={styles.headerRight}>
+                    <SimpleTopIconButton 
+                        iconSource={ICONS.shop}
+                        onPress={onShopPress}
+                    />
+                    <View style={styles.iconSpacer} />
+                    <SimpleTopIconButton 
+                        iconSource={ICONS.settings}
+                        onPress={onSettingsPress}
+                    />
+                </View>
+            </View>
+        </View>
+    );
+};
+
 // Main Menu Screen Component
 function MainMenuScreen() {
     const navigation = useNavigation();
@@ -723,6 +755,7 @@ function MainMenuScreen() {
 
     return (
         <SafeAreaView style={styles.safeArea}>
+            <StatusBar barStyle="light-content" backgroundColor={HEADER_COLOR} />
             
             <QuestList 
                 show={showQuestList} 
@@ -736,29 +769,15 @@ function MainMenuScreen() {
                 resizeMode="cover"
             >
                 <BlinkingLightAnimation isVisible={isFocused} />
+                <GrayHeader 
+                    onQuestPress={toggleQuestList}
+                    onShopPress={() => navigation.navigate('Shop')}
+                    onSettingsPress={() => navigation.navigate('Settings')}
+                    showQuestList={showQuestList}
+                    questIconRef={questIconRef}
+                />
+                
                 <View style={styles.contentContainer}>
-                    <View style={styles.topNavBar}>
-                        <View style={styles.topNavLeft}>
-                            <SimpleTopIconButton 
-                                iconSource={ICONS.quest}
-                                onPress={toggleQuestList}
-                                isQuest={true}
-                                isActive={showQuestList}
-                                refProp={questIconRef}
-                            />
-                        </View>
-                        
-                        <View style={styles.topNavRight}>
-                            <SimpleTopIconButton 
-                                iconSource={ICONS.shop}
-                                onPress={() => navigation.navigate('Shop')}
-                            />
-                            <SimpleTopIconButton 
-                                iconSource={ICONS.settings}
-                                onPress={() => navigation.navigate('Settings')}
-                            />
-                        </View>
-                    </View>
                     
                     <View style={styles.centerContent}>
                         <RobotPreview 
@@ -830,7 +849,7 @@ const questListStyles = StyleSheet.create({
 const styles = StyleSheet.create({
     safeArea: {
         flex: 1,
-        backgroundColor: LIGHT_GREY,
+        backgroundColor: HEADER_COLOR,
     },
     background: {
         flex: 1,
@@ -840,9 +859,49 @@ const styles = StyleSheet.create({
     contentContainer: {
         flex: 1,
         width: '100%',
-        height: '90%',
+        height: '100%',
         justifyContent: 'space-between',
         paddingVertical: scaleSize(-1),
+        marginTop: scaleSize(80), 
+    },
+    
+    // Gray Header Styles 
+    headerContainer: {
+        position: 'absolute',
+        top: scaleSize(10), 
+        left: 0,
+        right: 0,
+        height: scaleSize(90), 
+        backgroundColor: HEADER_COLOR,
+        zIndex: 100,
+        borderBottomWidth: 1,
+        borderBottomColor: '#3A3A3A',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 3,
+        elevation: 5,
+        borderRadius: scaleSize(10), 
+        paddingHorizontal: scaleSize(15), 
+    },
+    headerIconsContainer: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        height: '100%',
+    },
+    headerLeft: {
+        flex: 1,
+        alignItems: 'flex-start',
+    },
+    headerRight: {
+        flex: 1,
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+        alignItems: 'center',
+    },
+    iconSpacer: {
+        width: scaleSize(15), 
     },
     
     sparkContainer: {
@@ -857,51 +916,28 @@ const styles = StyleSheet.create({
         position: 'absolute',
     },
     
-    // TOP NAVIGATION BAR 
-    topNavBar: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingHorizontal: scaleSize(20),
-        paddingTop: scaleSize(15),
-        paddingBottom: scaleSize(10),
-        backgroundColor: 'rgba(0, 0, 0, 0.3)',
-        width: '100%',
-        zIndex: 50, 
-    },
-    topNavLeft: {
-        flex: 1,
-        alignItems: 'flex-start',
-    },
-    topNavRight: {
-        flex: 1,
-        flexDirection: 'row',
-        justifyContent: 'flex-end',
-        gap: scaleSize(20),
-    },
+    // TOP ICON BUTTON STYLES 
     topIconButton: {
-        width: scaleSize(48),
-        height: scaleSize(48),
-        borderRadius: scaleSize(24),
+        width: scaleSize(60), 
+        height: scaleSize(60), 
+        borderRadius: scaleSize(25),
         backgroundColor: 'rgba(255, 255, 255, 0.1)',
         justifyContent: 'center',
         alignItems: 'center',
-        borderWidth: 1,
+        borderWidth: 2,
         borderColor: 'rgba(255, 255, 255, 0.2)',
         shadowColor: '#000',
         shadowOffset: { width: 0, height: scaleSize(2) },
         shadowOpacity: 0.2,
         shadowRadius: scaleSize(3),
-        elevation: 3,
-        zIndex: 51, 
     },
     topIconButtonActive: {
         backgroundColor: 'rgba(0, 191, 255, 0.2)',
         borderColor: LIGHT_BLUE,
     },
     topIconImage: {
-        width: scaleSize(24),
-        height: scaleSize(24),
+        width: scaleSize(26), 
+        height: scaleSize(26), 
         tintColor: LIGHT_BLUE,
     },
     
