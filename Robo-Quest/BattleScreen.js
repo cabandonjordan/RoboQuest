@@ -13,7 +13,7 @@ import {
     Dimensions, 
     Easing 
 } from "react-native";
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { auth, db, doc, getDoc, setDoc, onAuthStateChanged } from './database/firebase';
 
@@ -77,28 +77,28 @@ const DEFAULT_LOADOUT = {
   Weapon: 'WeaponGeneralis'
 };
 
-// --- STATS CONFIGURATION ---
+// --- STATS CONFIGURATION (UPDATED FROM SPREADSHEET) ---
 
 const WEAPON_STATS = {
   WeaponGeneralis: {
     name: 'Twin Anti-Air Guns',
     attacks: [
-      { name: 'Burst Fire', damage: { min: 40, max: 60 }, cost: 3, type: 'attack' },
-      { name: 'Suppressive Fire', damage: { min: 80, max: 100 }, cost: 5, type: 'attack' }
+      { name: 'Burst Fire', damage: { min: 45, max: 55 }, cost: 3, type: 'attack' }, // Avg 50
+      { name: 'Suppressive Fire', damage: { min: 90, max: 110 }, cost: 5, type: 'attack' } // Avg 100
     ]
   },
   WeaponInnovare: {
     name: 'Missile Launcher Arrays',
     attacks: [
-      { name: 'Offensive Launch', damage: { min: 65, max: 85 }, cost: 3, type: 'attack' },
-      { name: 'Shield Protocol', damage: { min: 0, max: 0 }, cost: 5, type: 'shield', effectValue: 150 } 
+      { name: 'Offensive Launch', damage: { min: 65, max: 75 }, cost: 3, type: 'attack' }, // Avg 70
+      { name: 'Counter-Measure', damage: { min: 0, max: 0 }, cost: 5, type: 'shield', effectValue: 150 } // Shield/Block
     ]
   },
   WeaponCreativia: {
     name: 'Laser Spread',
     attacks: [
-      { name: 'Laser Blast', damage: { min: 50, max: 70 }, cost: 3, type: 'attack' },
-      { name: 'Overdrive', damage: { min: 150, max: 180 }, cost: 11, type: 'attack' }
+      { name: 'Laser Blast', damage: { min: 45, max: 55 }, cost: 3, type: 'attack' }, // Avg 50
+      { name: 'Overdrive Cascade', damage: { min: 170, max: 190 }, cost: 11, type: 'attack' } // Avg 180
     ]
   }
 };
@@ -218,6 +218,10 @@ function BattleScreen() {
   const [playerEN, setPlayerEN] = useState(10); 
   const [playerMaxEN, setPlayerMaxEN] = useState(20); 
   
+  // Refs to track state inside timeouts (Fixes "Static Shield" bug)
+  const playerShieldRef = useRef(playerShield);
+  const playerHPRef = useRef(playerHP);
+  
   const [enemyHP, setEnemyHP] = useState(800);
   const [enemyMaxHP, setEnemyMaxHP] = useState(800);
   
@@ -235,12 +239,27 @@ function BattleScreen() {
   const [playerAnimVisible, setPlayerAnimVisible] = useState(false);
   const [enemyAnimVisible, setEnemyAnimVisible] = useState(false);
 
+  // Bar Animations
+  const playerHPAnim = useRef(new Animated.Value(100)).current;
+  const enemyHPAnim = useRef(new Animated.Value(100)).current;
+  const playerShieldAnim = useRef(new Animated.Value(0)).current;
+  const playerENAnim = useRef(new Animated.Value(50)).current;
+
   // Special Effects States
   const [playerEffect, setPlayerEffect] = useState({ type: null, visible: false });
   const [enemyEffect, setEnemyEffect] = useState({ type: null, visible: false });
 
   const [battleRank, setBattleRank] = useState('B');
   const [rewards, setRewards] = useState({ coins: 0, part: null });
+
+  // Sync Refs with State
+  useEffect(() => {
+    playerShieldRef.current = playerShield;
+  }, [playerShield]);
+
+  useEffect(() => {
+    playerHPRef.current = playerHP;
+  }, [playerHP]);
 
   useEffect(() => {
     const randomBgIndex = Math.floor(Math.random() * BATTLE_ASSETS.backgrounds.length);
@@ -276,6 +295,39 @@ function BattleScreen() {
     return () => unsubscribe();
   }, []);
 
+  // Animate Bars
+  useEffect(() => {
+    Animated.timing(playerHPAnim, {
+        toValue: (playerHP / playerMaxHP) * 100,
+        duration: 500,
+        useNativeDriver: false,
+    }).start();
+  }, [playerHP, playerMaxHP]);
+
+  useEffect(() => {
+    Animated.timing(enemyHPAnim, {
+        toValue: (enemyHP / enemyMaxHP) * 100,
+        duration: 500,
+        useNativeDriver: false,
+    }).start();
+  }, [enemyHP, enemyMaxHP]);
+
+  useEffect(() => {
+    Animated.timing(playerShieldAnim, {
+        toValue: (playerShield / playerMaxHP) * 100,
+        duration: 500,
+        useNativeDriver: false,
+    }).start();
+  }, [playerShield, playerMaxHP]);
+
+  useEffect(() => {
+    Animated.timing(playerENAnim, {
+        toValue: (playerEN / playerMaxEN) * 100,
+        duration: 500,
+        useNativeDriver: false,
+    }).start();
+  }, [playerEN, playerMaxEN]);
+
   const initializeBattle = (currentLoadout, level) => {
     const chassis = CHASSIS_STATS[currentLoadout.Chassis] || CHASSIS_STATS.ChassisGeneralis;
     setPlayerMaxHP(chassis.hp);
@@ -301,11 +353,9 @@ function BattleScreen() {
       }
   };
 
-  // Helper function to update Battle Stats in Roboquest-Boss
   const updateBattleStats = async (result, droppedPart = null) => {
       if (!currentUser) return;
       try {
-          // Document ID: UserName-Roboquest-Boss
           const docId = `${playerName}-Roboquest-Boss`;
           const statsRef = doc(db, 'Roboquest-Boss', docId);
           const statsSnap = await getDoc(statsRef);
@@ -327,7 +377,6 @@ function BattleScreen() {
           bossData.lastEncounter = new Date().toISOString();
 
           await setDoc(statsRef, { [currentBossName]: bossData }, { merge: true });
-          console.log(`Stats updated for ${currentBossName}: ${result}`);
       } catch (e) {
           console.error("Error updating battle stats:", e);
       }
@@ -367,8 +416,7 @@ function BattleScreen() {
 
         const hitRoll = Math.random();
         let finalDamage = 0;
-        let didHit = false;
-
+        
         setPlayerAnimVisible(true);
         setTimeout(() => setPlayerAnimVisible(false), 600);
 
@@ -379,7 +427,6 @@ function BattleScreen() {
              finalDamage = Math.floor(calculateDamage(attack.damage) * 0.5);
              triggerEffect('enemy', 'Block');
              setBattleLog(prev => [...prev, `-> Enemy blocked! (${finalDamage} dmg)`]);
-             didHit = true;
         } else {
             finalDamage = calculateDamage(attack.damage);
             if (Math.random() < 0.2) {
@@ -389,7 +436,6 @@ function BattleScreen() {
             } else {
                 setBattleLog(prev => [...prev, `-> Dealt ${finalDamage} damage`]);
             }
-            didHit = true;
         }
 
         finishPlayerTurn(finalDamage);
@@ -438,6 +484,9 @@ function BattleScreen() {
           setTimeout(() => {
               setEnemyAnimVisible(false);
               
+              // Use Ref for live Shield value inside timeout
+              let currentShield = playerShieldRef.current;
+              
               const hitRoll = Math.random();
               let incomingDamage = Math.floor(currentEnemy.baseDmg * (0.8 + Math.random() * 0.4));
               
@@ -450,14 +499,15 @@ function BattleScreen() {
                   triggerEffect('player', 'Block');
                   setBattleLog(prev => [...prev, `-> Blocked! took ${incomingDamage} dmg`]);
               } else {
-                  if (playerShield > 0) {
+                  // SHIELD LOGIC using Ref to ensure we see the latest value
+                  if (currentShield > 0) {
                       triggerEffect('player', 'Shield');
-                      if (playerShield >= incomingDamage) {
+                      if (currentShield >= incomingDamage) {
                           setPlayerShield(prev => prev - incomingDamage);
                           setBattleLog(prev => [...prev, `-> Shield absorbed damage!`]);
                           incomingDamage = 0;
                       } else {
-                          const remainingDmg = incomingDamage - playerShield;
+                          const remainingDmg = incomingDamage - currentShield;
                           setPlayerShield(0);
                           incomingDamage = remainingDmg;
                           setBattleLog(prev => [...prev, `-> Shield broken! took ${remainingDmg} dmg`]);
@@ -467,21 +517,19 @@ function BattleScreen() {
 
               if (incomingDamage > 0) {
                 setPlayerHP(prev => Math.max(0, prev - incomingDamage));
-                if (playerShield <= 0 && hitRoll >= 0.25) {
-                     setBattleLog(prev => [...prev, `-> Took ${incomingDamage} damage`]);
-                }
+                // Only log HP damage if we actually took some
+                setBattleLog(prev => [...prev, `-> Took ${incomingDamage} damage`]);
               }
 
               const engine = ENGINE_STATS[loadout.Engines] || ENGINE_STATS.EngineGeneralis;
               const regenAmount = engine.regen || 4; 
               setPlayerEN(prev => Math.min(playerMaxEN, prev + regenAmount));
               
-              // Check Defeat
-              if (playerHP - incomingDamage <= 0) {
+              // Check Defeat using Ref to be safe
+              if (playerHPRef.current - incomingDamage <= 0) {
                   setBattleLog(prev => [...prev, "System Failure..."]);
                   setBattleEnded(true);
                   setWinner('enemy');
-                  // Record Defeat
                   updateBattleStats('defeat'); 
               }
               
@@ -511,12 +559,9 @@ function BattleScreen() {
 
     if (currentUser) {
         try {
-            // 1. Unlocking Parts (Roboquest-Collection)
             if (droppedPart) {
                 await unlockPartForUser(currentUser.uid, droppedPart);
             }
-
-            // 2. Storing Scraps 
             const userRef = doc(db, 'Roboquest-Scraps', currentUser.uid);
             const userSnap = await getDoc(userRef);
             let currentScraps = 0;
@@ -524,9 +569,6 @@ function BattleScreen() {
                 currentScraps = userSnap.data().scraps || 0;
             }
             await setDoc(userRef, { scraps: currentScraps + coins }, { merge: true });
-
-            // 3. Battle Stats (Roboquest-Scraps)
-            // Record Win and Drops
             await updateBattleStats('win', droppedPart);
 
         } catch (error) {
@@ -554,7 +596,6 @@ function BattleScreen() {
                       setBattleEnded(true);
                       setWinner('enemy');
                       setBattleLog(prev => [...prev, "Player retreated!"]);
-                      // Record Defeat
                       updateBattleStats('defeat');
                   } 
               }
@@ -618,11 +659,6 @@ function BattleScreen() {
   const currentEnemy = ENEMY_DATA[enemyLevel];
   const playerAttackGif = BATTLE_ASSETS.playerAttacks[equippedWeapon] || BATTLE_ASSETS.playerAttacks.WeaponGeneralis;
 
-  const playerHPPercent = (playerHP / playerMaxHP) * 100;
-  const enemyHPPercent = (enemyHP / enemyMaxHP) * 100;
-  const playerENPercent = (playerEN / playerMaxEN) * 100;
-  const playerShieldPercent = (playerShield / playerMaxHP) * 100;
-
   return (
     <ImageBackground source={currentBg} style={styles.container} resizeMode="cover">
       <SafeAreaView style={styles.topOverlay}>
@@ -645,11 +681,25 @@ function BattleScreen() {
                 style={[styles.enemyImg, enemyLevel === 2 && { width: 180, height: 180 }]} 
             />
             {playerAnimVisible && (
-                <Image source={playerAttackGif} style={styles.attackEffect} resizeMode="contain" />
+                <Image 
+                    source={playerAttackGif} 
+                    style={[
+                        styles.attackEffect,
+                        equippedWeapon === 'WeaponInnovare' && styles.innovareAttackEffect,
+                        equippedWeapon === 'WeaponCreativia' && styles.creativiaAttackEffect
+                    ]} 
+                    resizeMode="contain" 
+                />
             )}
           </View>
           <View style={styles.healthBar}>
-            <View style={[styles.healthFill, { width: `${Math.max(0, enemyHPPercent)}%`, backgroundColor: "#E74C3C" }]} />
+            <Animated.View style={[styles.healthFill, { 
+                width: enemyHPAnim.interpolate({
+                    inputRange: [0, 100],
+                    outputRange: ['0%', '100%']
+                }), 
+                backgroundColor: "#E74C3C" 
+            }]} />
             <Text style={styles.barTextOverlay}>{Math.max(0, enemyHP)} / {enemyMaxHP}</Text>
           </View>
         </View>
@@ -680,21 +730,38 @@ function BattleScreen() {
                 <Text style={styles.playerLabel}>{playerName}</Text>
                 
                 {/* Shield Bar Overlay */}
-                {playerShield > 0 && (
-                     <View style={[styles.healthBar, { position: 'absolute', bottom: 22, height: 6, width: 140, backgroundColor: 'transparent', borderWidth: 0 }]}>
-                         <View style={[styles.healthFill, { width: `${Math.min(100, playerShieldPercent)}%`, backgroundColor: "#ADD8E6", opacity: 0.8 }]} />
-                     </View>
-                )}
+                <View style={[styles.healthBar, { position: 'absolute', bottom: 22, height: 6, width: 140, backgroundColor: 'transparent', borderWidth: 0 }]}>
+                     <Animated.View style={[styles.healthFill, { 
+                         width: playerShieldAnim.interpolate({
+                             inputRange: [0, 100],
+                             outputRange: ['0%', '100%']
+                         }), 
+                         backgroundColor: "#ADD8E6", 
+                         opacity: 0.8 
+                     }]} />
+                 </View>
 
                 {/* Health Bar */}
                 <View style={styles.healthBar}>
-                    <View style={[styles.healthFill, { width: `${Math.max(0, playerHPPercent)}%`, backgroundColor: "#27AE60" }]} />
+                    <Animated.View style={[styles.healthFill, { 
+                        width: playerHPAnim.interpolate({
+                            inputRange: [0, 100],
+                            outputRange: ['0%', '100%']
+                        }), 
+                        backgroundColor: "#27AE60" 
+                    }]} />
                     <Text style={styles.barTextOverlay}>{Math.max(0, playerHP)} / {playerMaxHP} {playerShield > 0 ? `(+${playerShield})` : ''}</Text>
                 </View>
                 
                 {/* Energy Bar */}
                 <View style={[styles.healthBar, { borderColor: 'rgba(0,191,255,0.5)', marginTop: 4 }]}>
-                    <View style={[styles.healthFill, { width: `${Math.max(0, playerENPercent)}%`, backgroundColor: "#00BFFF" }]} />
+                    <Animated.View style={[styles.healthFill, { 
+                        width: playerENAnim.interpolate({
+                            inputRange: [0, 100],
+                            outputRange: ['0%', '100%']
+                        }), 
+                        backgroundColor: "#00BFFF" 
+                    }]} />
                     <Text style={styles.barTextOverlay}>{playerEN} / {playerMaxEN} EN</Text>
                 </View>
              </View>
@@ -826,7 +893,7 @@ const styles = StyleSheet.create({
   surrenderButton: {
       flexDirection: 'row', 
       alignItems: 'center', 
-      backgroundColor: 'rgba(0,0,0,0.5)',
+      backgroundColor: 'rgba(0,0,0,0.5)', 
       paddingVertical: 8, 
       paddingHorizontal: 12, 
       borderRadius: 20, 
@@ -858,6 +925,23 @@ const styles = StyleSheet.create({
       right: 5, 
       zIndex: 99, 
       transform: [{ rotate: '10deg' }],
+  },
+  innovareAttackEffect: { 
+      position: 'absolute',
+      width: 300, 
+      height: 300,
+      top: 10,     
+      right: 40,
+      zIndex: 99, 
+  },
+  creativiaAttackEffect: { 
+      position: 'absolute',
+      width: 340, 
+      height: 340,
+      top: 30,     
+      right: -10,
+      zIndex: 99,
+      transform: [{ rotate: '-15deg' }],
   },
   specialEffectContainer: {
       position: 'absolute', 
@@ -1045,7 +1129,7 @@ const styles = StyleSheet.create({
   },
   rematchText: { 
       fontWeight: 'bold', 
-      color: '#FFFFFF', // WHITE TEXT
+      color: '#FFFFFF', 
       fontSize: 16 
   },
   okButton: { 
