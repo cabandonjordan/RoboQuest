@@ -15,6 +15,7 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { auth, db, doc, getDoc, setDoc, onAuthStateChanged } from './database/firebase';
+import { Audio } from 'expo-av'; // Import Audio directly
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -44,8 +45,13 @@ const BATTLE_ASSETS = {
         Power: require('./assets/battle/specialeffects/Power.png'),
     },
     loadingBg: require("./assets/background/NewLoadingBg.png"),
-    // Using settings icon as the cogwheel for loading
-    cogwheel: require("./assets/icons/settings.png")
+    cogwheel: require("./assets/icons/settings.png"),
+    // Boss Music Mapping directly here
+    music: [
+        require("./assets/music/FirstBoss.mp3"),  // Level 0
+        require("./assets/music/SecondBoss.mp3"), // Level 1
+        require("./assets/music/FinalBoss.mp3"),  // Level 2
+    ]
 };
 
 const ASSETS = {
@@ -80,7 +86,6 @@ const DEFAULT_LOADOUT = {
 };
 
 // --- STATS CONFIGURATION ---
-
 const WEAPON_STATS = {
   WeaponGeneralis: {
     name: 'Twin Anti-Air Guns',
@@ -105,22 +110,25 @@ const WEAPON_STATS = {
   }
 };
 
+// UPDATED ENGINE STATS (Regen: 3, 5, 7)
 const ENGINE_STATS = {
-    EngineGeneralis: { regen: 4 },
-    EngineInnovare: { regen: 6 },
-    EngineCreativia: { regen: 8 },
+    EngineGeneralis: { regen: 3 }, 
+    EngineInnovare: { regen: 5 },  
+    EngineCreativia: { regen: 7 }, 
 };
 
+// UPDATED CHASSIS STATS (Creativia HP: 1000)
 const CHASSIS_STATS = {
     ChassisGeneralis: { hp: 650 },
     ChassisInnovare: { hp: 750 },
-    ChassisCreativia: { hp: 500 },
+    ChassisCreativia: { hp: 1000 }, 
 };
 
+// UPDATED ENEMY DATA (Higher Damage for challenge)
 const ENEMY_DATA = [
-    { name: "Baby Alien", hp: 800, baseDmg: 50, image: require("./assets/battle/enemies/EnemySmall.png") },
-    { name: "Middle Alien", hp: 1000, baseDmg: 80, image: require("./assets/battle/enemies/EnemyMedium.png") },
-    { name: "Big Mama", hp: 1400, baseDmg: 120, image: require("./assets/battle/enemies/EnemyLarge.png") }
+    { name: "Baby Alien", hp: 800, baseDmg: 65, image: require("./assets/battle/enemies/EnemySmall.png") },   // increased from 50
+    { name: "Middle Alien", hp: 1000, baseDmg: 110, image: require("./assets/battle/enemies/EnemyMedium.png") }, // increased from 80
+    { name: "Big Mama", hp: 1400, baseDmg: 160, image: require("./assets/battle/enemies/EnemyLarge.png") }      // increased from 120
 ];
 
 // Special Effect Component
@@ -217,6 +225,9 @@ function BattleScreen() {
   const [enemyLevel, setEnemyLevel] = useState(0); 
   const [currentBg, setCurrentBg] = useState(BATTLE_ASSETS.backgrounds[0]);
   
+  // Audio State
+  const [sound, setSound] = useState();
+
   // Animation States
   const [playerAnimVisible, setPlayerAnimVisible] = useState(false);
   const [enemyAnimVisible, setEnemyAnimVisible] = useState(false);
@@ -241,6 +252,11 @@ function BattleScreen() {
     isDuplicate: false, 
     conversionAmount: 0 
   });
+
+  // Cleanup sound on unmount
+  useEffect(() => {
+    return sound ? () => { sound.unloadAsync(); } : undefined;
+  }, [sound]);
 
   // Cogwheel loop animation
   useEffect(() => {
@@ -342,18 +358,51 @@ function BattleScreen() {
     }).start();
   }, [playerEN, playerMaxEN]);
 
+  // --- MUSIC LOGIC ---
+  const playBossMusic = async (level) => {
+      try {
+          // Unload any existing sound first
+          if (sound) {
+              await sound.unloadAsync();
+          }
+
+          // Determine music track based on level (safe modulo in case levels go > 2)
+          const trackIndex = level % BATTLE_ASSETS.music.length;
+          const source = BATTLE_ASSETS.music[trackIndex];
+
+          const { sound: newSound } = await Audio.Sound.createAsync(
+              source,
+              { isLooping: true, volume: 0.4 }
+          );
+          setSound(newSound);
+          await newSound.playAsync();
+      } catch (error) {
+          console.log("Error playing boss music:", error);
+      }
+  };
+
+  const stopMusic = async () => {
+      if (sound) {
+          await sound.stopAsync();
+          await sound.unloadAsync();
+      }
+  };
+
   const initializeBattle = (currentLoadout, level) => {
     const chassis = CHASSIS_STATS[currentLoadout.Chassis] || CHASSIS_STATS.ChassisGeneralis;
     setPlayerMaxHP(chassis.hp);
     setPlayerHP(chassis.hp);
     setPlayerShield(0);
-    setPlayerEN(10); 
+    setPlayerEN(20); // EN starts at MAX (20)
     
     const currentEnemy = ENEMY_DATA[level] || ENEMY_DATA[0];
     setEnemyMaxHP(currentEnemy.hp);
     setEnemyHP(currentEnemy.hp);
     setEnemyLevel(level);
     
+    // Trigger the music for this specific level
+    playBossMusic(level);
+
     setBattleLog([`Battle Started against ${currentEnemy.name}!`]);
   };
 
@@ -641,6 +690,7 @@ function BattleScreen() {
 
   const handleExitTransition = () => {
     setIsExiting(true);
+    stopMusic(); // Stop music when exiting to menu
     setTimeout(() => {
         navigation.navigate('Home');
     }, 2000); 
@@ -680,6 +730,7 @@ function BattleScreen() {
   const handleNextBattle = () => {
       setBattleEnded(false);
       setWinner(null);
+      // Logic for next level index
       const nextLevel = (enemyLevel + 1) % 3;
       const randomBgIndex = Math.floor(Math.random() * BATTLE_ASSETS.backgrounds.length);
       setCurrentBg(BATTLE_ASSETS.backgrounds[randomBgIndex]);

@@ -6,14 +6,27 @@ import {
   TouchableOpacity,
   Switch,
   Dimensions,
+  TextInput,
+  Alert,
+  ActivityIndicator
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import Slider from '@react-native-community/slider';
 import { Audio } from 'expo-av';
 import BackgroundMusicManager from './services/BackgroundMusicManager';
 import { useAudio } from './contexts/AudioContext';
-// Added Firebase imports for Logout
-import { auth, signOut } from './database/firebase';
+// Added Firebase imports for Logout and Database operations
+import { 
+    auth, 
+    signOut, 
+    updateProfile, 
+    db, 
+    doc, 
+    getDoc, 
+    setDoc, 
+    deleteDoc, 
+    updateDoc 
+} from './database/firebase';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -49,8 +62,13 @@ function SettingsScreen() {
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [vibrationsEnabled, setVibrationsEnabled] = useState(false);
   const [showAudioModal, setShowAudioModal] = useState(false);
-  // Changed from showDeleteModal to showLogoutModal
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  
+  // --- New State for Name Change ---
+  const [showNameModal, setShowNameModal] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [isUpdatingName, setIsUpdatingName] = useState(false);
+
   const isInitialMount = useRef(true);
 
   // Control background music playback based on musicEnabled state
@@ -114,6 +132,103 @@ function SettingsScreen() {
     }
   };
 
+  // --- Change Name Logic ---
+  const handleChangeNamePress = () => {
+    playButtonSound();
+    if (auth.currentUser) {
+        setNewName(auth.currentUser.displayName || '');
+    }
+    setShowNameModal(true);
+  };
+
+  const handleCloseNameModal = () => {
+    playButtonSound();
+    setShowNameModal(false);
+    setIsUpdatingName(false);
+  };
+
+  // Helper to move a document from one ID to another
+  const migrateCollection = async (collectionName, oldId, newId) => {
+      try {
+          const oldDocRef = doc(db, collectionName, oldId);
+          const newDocRef = doc(db, collectionName, newId);
+          
+          const oldDocSnap = await getDoc(oldDocRef);
+          
+          if (oldDocSnap.exists()) {
+              const data = oldDocSnap.data();
+              // Save to new ID
+              await setDoc(newDocRef, data);
+              // Delete old ID
+              await deleteDoc(oldDocRef);
+              console.log(`Migrated ${collectionName}: ${oldId} -> ${newId}`);
+          }
+      } catch (error) {
+          console.error(`Error migrating ${collectionName}:`, error);
+      }
+  };
+
+  const handleSaveName = async () => {
+      playButtonSound();
+      if (newName.trim().length === 0) {
+          Alert.alert("Invalid Name", "Please enter a valid name.");
+          return;
+      }
+      
+      setIsUpdatingName(true);
+
+      try {
+          const user = auth.currentUser;
+          if (user) {
+              const oldName = user.displayName;
+              const nameToUpdate = newName.trim();
+
+              // 1. Update Firebase Auth Profile
+              await updateProfile(user, {
+                  displayName: nameToUpdate
+              });
+
+              // 2. Update Roboquest-Users (Field Update)
+              const userDocRef = doc(db, 'Roboquest-Users', user.uid);
+              try {
+                  const userSnap = await getDoc(userDocRef);
+                  if (userSnap.exists()) {
+                      await updateDoc(userDocRef, { username: nameToUpdate });
+                  } else {
+                      await setDoc(userDocRef, { username: nameToUpdate, email: user.email });
+                  }
+              } catch (e) {
+                  console.log("Error updating user doc:", e);
+              }
+
+              // 3. Migrate Collections that rely on Username as the Document ID
+              if (oldName && oldName !== nameToUpdate) {
+                  // A. Migrate Unlocked Parts
+                  // Pattern: Collection 'Roboquest-UnlockedParts', DocID: username
+                  await migrateCollection('Roboquest-UnlockedParts', oldName, nameToUpdate);
+
+                  // B. Migrate Boss Stats
+                  // Pattern: Collection 'Roboquest-Boss', DocID: username-Roboquest-Boss
+                  await migrateCollection(
+                      'Roboquest-Boss', 
+                      `${oldName}-Roboquest-Boss`, 
+                      `${nameToUpdate}-Roboquest-Boss`
+                  );
+                  
+                  // Add any other collections here if they use username as ID
+              }
+
+              Alert.alert("Success", "Name updated successfully!");
+              setShowNameModal(false);
+          }
+      } catch (error) {
+          console.error("Error updating name:", error);
+          Alert.alert("Error", "Could not update name. Please try again.");
+      } finally {
+          setIsUpdatingName(false);
+      }
+  };
+
   return (
     <View style={styles.screenContainer}>
       <View style={styles.modalContainer}>
@@ -131,7 +246,7 @@ function SettingsScreen() {
           </View>
 
           <View style={styles.gridRow}>
-            <BlueButton style={styles.gridItem}>Change Name</BlueButton>
+            <BlueButton style={styles.gridItem} onPress={handleChangeNamePress}>Change Name</BlueButton>
             {/* Updated button to Log Out */}
             <TouchableOpacity style={[styles.blueButton, styles.gridItem, styles.logoutButton]} onPress={() => { playButtonSound(); handleLogoutPress(); }} activeOpacity={0.8}>
               <Text style={styles.blueButtonText}>Log Out</Text>
@@ -237,6 +352,52 @@ function SettingsScreen() {
             </View>
           </View>
         </View>
+      )}
+
+      {/* Change Name Modal */}
+      {showNameModal && (
+          <View style={styles.audioModalOverlay}>
+              <View style={styles.logoutModalContainer}>
+                  <View style={styles.logoutModalHeader}>
+                      <Text style={[styles.logoutModalTitle, {color: '#fff'}]}>Change Name</Text>
+                      <TouchableOpacity style={[styles.modalCloseButton, {backgroundColor: '#6b9ac4'}]} onPress={handleCloseNameModal}>
+                          <Text style={styles.closeText}>✕</Text>
+                      </TouchableOpacity>
+                  </View>
+                  
+                  <View style={styles.logoutContent}>
+                    {isUpdatingName ? (
+                        <View style={{padding: 20, alignItems: 'center'}}>
+                            <ActivityIndicator size="large" color="#4CAF50" />
+                            <Text style={[styles.logoutSubText, {marginTop: 10}]}>Updating all records...</Text>
+                        </View>
+                    ) : (
+                        <>
+                          <Text style={styles.logoutWarningText}>Enter your new display name:</Text>
+                          <TextInput 
+                              style={styles.nameInput}
+                              value={newName}
+                              onChangeText={setNewName}
+                              placeholder="Player Name"
+                              maxLength={15}
+                          />
+                          
+                          <View style={styles.logoutButtonsRow}>
+                              <TouchableOpacity style={styles.cancelButton} onPress={handleCloseNameModal}>
+                                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                              </TouchableOpacity>
+                              <TouchableOpacity 
+                                  style={[styles.confirmLogoutButton, {backgroundColor: '#4CAF50', borderColor: '#2e7d32'}]} 
+                                  onPress={handleSaveName}
+                              >
+                                  <Text style={styles.confirmLogoutText}>Save</Text>
+                              </TouchableOpacity>
+                          </View>
+                        </>
+                    )}
+                  </View>
+              </View>
+          </View>
       )}
 
       {/* Log Out Confirmation Modal (Replaces Delete Modal) */}
@@ -572,6 +733,17 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     textTransform: 'uppercase',
   },
+  // New Styles for Input
+  nameInput: {
+      backgroundColor: '#FFF',
+      borderRadius: 8,
+      padding: 12,
+      fontSize: 18,
+      marginBottom: 20,
+      borderWidth: 2,
+      borderColor: '#8a98a6',
+      textAlign: 'center'
+  }
 });
 
 export default SettingsScreen;
