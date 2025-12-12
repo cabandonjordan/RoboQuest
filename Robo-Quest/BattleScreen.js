@@ -181,27 +181,6 @@ const SpecialEffectOverlay = ({ effect, visible, target }) => {
     );
 };
 
-const unlockPartForUser = async (userId, partName) => {
-    try {
-        const userDocRef = doc(db, 'Roboquest-Collection', userId);
-        const userDoc = await getDoc(userDocRef);
-        let parts = [];
-        if (userDoc.exists()) {
-            parts = userDoc.data().parts || [];
-        }
-        
-        if (!parts.includes(partName)) {
-            parts.push(partName);
-            await setDoc(userDocRef, { parts }, { merge: true });
-            return true; 
-        }
-        return false;
-    } catch (error) {
-        console.error('Error unlocking part:', error);
-        return false;
-    }
-};
-
 function BattleScreen() {
   const navigation = useNavigation();
   
@@ -250,7 +229,12 @@ function BattleScreen() {
   const [enemyEffect, setEnemyEffect] = useState({ type: null, visible: false });
 
   const [battleRank, setBattleRank] = useState('B');
-  const [rewards, setRewards] = useState({ coins: 0, part: null });
+  const [rewards, setRewards] = useState({ 
+    coins: 0, 
+    part: null, 
+    isDuplicate: false, 
+    conversionAmount: 0 
+  });
 
   // Sync Refs with State
   useEffect(() => {
@@ -568,33 +552,62 @@ function BattleScreen() {
     else if (hpPercentage >= 30) rank = 'B';
     
     setBattleRank(rank);
-    const coins = Math.floor(Math.random() * 100) + 50;
+    let coinsCalculated = Math.floor(Math.random() * 100) + 50;
     
-    let droppedPart = null;
+    let droppedPartName = null;
+    let isDuplicate = false;
+    const conversionAmount = 100;
+
     if (Math.random() < 0.4) {
         const randomPartIndex = Math.floor(Math.random() * PART_CATEGORIES.length);
-        droppedPart = PART_CATEGORIES[randomPartIndex];
+        droppedPartName = PART_CATEGORIES[randomPartIndex];
     }
-    setRewards({ coins, part: droppedPart });
 
     if (currentUser) {
         try {
-            if (droppedPart) {
-                await unlockPartForUser(currentUser.uid, droppedPart);
+            if (droppedPartName) {
+                const userCollectionRef = doc(db, 'Roboquest-Collection', currentUser.uid);
+                const collectionSnap = await getDoc(userCollectionRef);
+                let currentParts = [];
+                
+                if (collectionSnap.exists()) {
+                    currentParts = collectionSnap.data().parts || [];
+                }
+
+                if (currentParts.includes(droppedPartName)) {
+                    // Duplicate found
+                    isDuplicate = true;
+                    coinsCalculated += conversionAmount; // Add bonus coins for duplicate
+                    console.log(`Duplicate part ${droppedPartName} converted to ${conversionAmount} coins`);
+                } else {
+                    // New part
+                    currentParts.push(droppedPartName);
+                    await setDoc(userCollectionRef, { parts: currentParts }, { merge: true });
+                }
             }
-            const userRef = doc(db, 'Roboquest-Scraps', currentUser.uid);
-            const userSnap = await getDoc(userRef);
+
+            // Update coins (field: coins in Roboquest-Scraps)
+            const scrapRef = doc(db, 'Roboquest-Scraps', currentUser.uid);
+            const scrapSnap = await getDoc(scrapRef);
             let currentCoins = 0;
-            if (userSnap.exists()) {
-                currentCoins = userSnap.data().coins || 0;
+            if (scrapSnap.exists()) {
+                currentCoins = scrapSnap.data().coins || 0;
             }
-            await setDoc(userRef, { coins: currentCoins + coins }, { merge: true });
-            await updateBattleStats('win', droppedPart);
+            await setDoc(scrapRef, { coins: currentCoins + coinsCalculated }, { merge: true });
+            
+            await updateBattleStats('win', isDuplicate ? null : droppedPartName);
 
         } catch (error) {
             console.error("Error saving rewards:", error);
         }
     }
+    
+    setRewards({ 
+        coins: coinsCalculated, 
+        part: droppedPartName, 
+        isDuplicate, 
+        conversionAmount 
+    });
   };
 
   const handleSurrender = () => {
@@ -809,7 +822,21 @@ function BattleScreen() {
                         </View>
                         {rewards.part ? (
                              <View style={styles.rewardItem}>
-                                <Text style={styles.rewardText}>🔧 Unlocked: {rewards.part}</Text>
+                                {rewards.isDuplicate ? (
+                                    <View style={{alignItems: 'center'}}>
+                                        <Text style={[styles.rewardText, {color: '#FFA500', fontSize: 14}]}>
+                                            ♻️ Duplicate Part Found:
+                                        </Text>
+                                        <Text style={[styles.rewardText, {fontSize: 12}]}>
+                                            {rewards.part}
+                                        </Text>
+                                        <Text style={[styles.noPartText, {marginTop: 2}]}>
+                                            Converted to {rewards.conversionAmount} Scraps
+                                        </Text>
+                                    </View>
+                                ) : (
+                                    <Text style={styles.rewardText}>🔧 Unlocked: {rewards.part}</Text>
+                                )}
                              </View>
                         ) : (
                             <Text style={styles.noPartText}>No parts found this time.</Text>

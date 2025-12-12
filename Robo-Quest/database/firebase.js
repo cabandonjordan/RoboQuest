@@ -34,7 +34,8 @@ import {
   onSnapshot,
   query,
   where,
-  writeBatch
+  writeBatch,
+  increment
 } from "firebase/firestore";
 
 const firebaseConfig = {
@@ -82,5 +83,6 @@ export {
   onSnapshot,
   query,
   where,
-  writeBatch
+  writeBatch,
+  increment
 };
