@@ -13,7 +13,7 @@ import {
     Dimensions, 
     Easing 
 } from "react-native";
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { auth, db, doc, getDoc, setDoc, onAuthStateChanged } from './database/firebase';
 
@@ -77,28 +77,28 @@ const DEFAULT_LOADOUT = {
   Weapon: 'WeaponGeneralis'
 };
 
-// --- STATS CONFIGURATION (UPDATED FROM SPREADSHEET) ---
+// --- STATS CONFIGURATION ---
 
 const WEAPON_STATS = {
   WeaponGeneralis: {
     name: 'Twin Anti-Air Guns',
     attacks: [
-      { name: 'Burst Fire', damage: { min: 45, max: 55 }, cost: 3, type: 'attack' }, // Avg 50
-      { name: 'Suppressive Fire', damage: { min: 90, max: 110 }, cost: 5, type: 'attack' } // Avg 100
+      { name: 'Burst Fire', damage: { min: 45, max: 55 }, cost: 3, type: 'attack', icon: 'flash' },
+      { name: 'Suppressive Fire', damage: { min: 90, max: 110 }, cost: 5, type: 'attack', icon: 'flame' }
     ]
   },
   WeaponInnovare: {
     name: 'Missile Launcher Arrays',
     attacks: [
-      { name: 'Offensive Launch', damage: { min: 65, max: 75 }, cost: 3, type: 'attack' }, // Avg 70
-      { name: 'Counter-Measure', damage: { min: 0, max: 0 }, cost: 5, type: 'shield', effectValue: 150 } // Shield/Block
+      { name: 'Offensive Launch', damage: { min: 65, max: 75 }, cost: 3, type: 'attack', icon: 'rocket' },
+      { name: 'Counter-Measure', damage: { min: 0, max: 0 }, cost: 5, type: 'shield', effectValue: 150, icon: 'shield' }
     ]
   },
   WeaponCreativia: {
     name: 'Laser Spread',
     attacks: [
-      { name: 'Laser Blast', damage: { min: 45, max: 55 }, cost: 3, type: 'attack' }, // Avg 50
-      { name: 'Overdrive Cascade', damage: { min: 170, max: 190 }, cost: 11, type: 'attack' } // Avg 180
+      { name: 'Laser Blast', damage: { min: 45, max: 55 }, cost: 3, type: 'attack', icon: 'sunny' },
+      { name: 'Overdrive Cascade', damage: { min: 170, max: 190 }, cost: 11, type: 'attack', icon: 'nuclear' }
     ]
   }
 };
@@ -218,7 +218,7 @@ function BattleScreen() {
   const [playerEN, setPlayerEN] = useState(10); 
   const [playerMaxEN, setPlayerMaxEN] = useState(20); 
   
-  // Refs to track state inside timeouts (Fixes "Static Shield" bug)
+  // Refs to track state inside timeouts
   const playerShieldRef = useRef(playerShield);
   const playerHPRef = useRef(playerHP);
   
@@ -313,9 +313,10 @@ function BattleScreen() {
   }, [enemyHP, enemyMaxHP]);
 
   useEffect(() => {
+    // Shield animation logic
     Animated.timing(playerShieldAnim, {
-        toValue: (playerShield / playerMaxHP) * 100,
-        duration: 500,
+        toValue: (Math.min(playerShield, playerMaxHP) / playerMaxHP) * 100,
+        duration: 300,
         useNativeDriver: false,
     }).start();
   }, [playerShield, playerMaxHP]);
@@ -407,8 +408,11 @@ function BattleScreen() {
 
         // CHECK FOR SHIELD SKILL
         if (attack.type === 'shield') {
-            setPlayerShield(prev => prev + attack.effectValue);
-            setBattleLog(prev => [...prev, `-> Shield active (+${attack.effectValue})`]);
+            const maxShield = Math.floor(playerMaxHP * 0.5); // Cap shield at 50% of max HP to prevent "overpowered" stacking
+            const newShield = Math.min(playerShield + attack.effectValue, maxShield);
+            
+            setPlayerShield(newShield);
+            setBattleLog(prev => [...prev, `-> Shield boosted to ${newShield}`]);
             triggerEffect('player', 'Shield');
             finishPlayerTurn(0); 
             return;
@@ -498,27 +502,43 @@ function BattleScreen() {
                   incomingDamage = Math.floor(incomingDamage * 0.4);
                   triggerEffect('player', 'Block');
                   setBattleLog(prev => [...prev, `-> Blocked! took ${incomingDamage} dmg`]);
+                  
+                  // Shield logic for blocked damage
+                  if (currentShield > 0 && incomingDamage > 0) {
+                      const reduction = Math.min(currentShield, incomingDamage);
+                      setPlayerShield(prev => prev - reduction);
+                      currentShield -= reduction; // Update local ref for calculation
+                      incomingDamage -= reduction;
+                      
+                      setBattleLog(prev => [...prev, `-> Shield blocked ${reduction} dmg`]);
+                      triggerEffect('player', 'Shield');
+                  }
               } else {
-                  // SHIELD LOGIC using Ref to ensure we see the latest value
+                  // Direct hit SHIELD LOGIC
                   if (currentShield > 0) {
                       triggerEffect('player', 'Shield');
-                      if (currentShield >= incomingDamage) {
-                          setPlayerShield(prev => prev - incomingDamage);
-                          setBattleLog(prev => [...prev, `-> Shield absorbed damage!`]);
-                          incomingDamage = 0;
-                      } else {
-                          const remainingDmg = incomingDamage - currentShield;
-                          setPlayerShield(0);
-                          incomingDamage = remainingDmg;
-                          setBattleLog(prev => [...prev, `-> Shield broken! took ${remainingDmg} dmg`]);
+                      const damageToShield = Math.min(currentShield, incomingDamage);
+                      
+                      // Immediately update shield state for "live reduce" effect
+                      setPlayerShield(prev => Math.max(0, prev - damageToShield));
+                      
+                      const remainingDamage = incomingDamage - damageToShield;
+                      
+                      if (damageToShield > 0) {
+                          setBattleLog(prev => [...prev, `-> Shield absorbed ${damageToShield} damage!`]);
                       }
+                      
+                      if (remainingDamage > 0) {
+                           setBattleLog(prev => [...prev, `-> Shield broken!`]);
+                      }
+                      
+                      incomingDamage = remainingDamage;
                   }
               }
 
               if (incomingDamage > 0) {
                 setPlayerHP(prev => Math.max(0, prev - incomingDamage));
-                // Only log HP damage if we actually took some
-                setBattleLog(prev => [...prev, `-> Took ${incomingDamage} damage`]);
+                setBattleLog(prev => [...prev, `-> Took ${incomingDamage} HP damage`]);
               }
 
               const engine = ENGINE_STATS[loadout.Engines] || ENGINE_STATS.EngineGeneralis;
@@ -564,11 +584,11 @@ function BattleScreen() {
             }
             const userRef = doc(db, 'Roboquest-Scraps', currentUser.uid);
             const userSnap = await getDoc(userRef);
-            let currentScraps = 0;
+            let currentCoins = 0;
             if (userSnap.exists()) {
-                currentScraps = userSnap.data().scraps || 0;
+                currentCoins = userSnap.data().coins || 0;
             }
-            await setDoc(userRef, { scraps: currentScraps + coins }, { merge: true });
+            await setDoc(userRef, { coins: currentCoins + coins }, { merge: true });
             await updateBattleStats('win', droppedPart);
 
         } catch (error) {
@@ -730,16 +750,19 @@ function BattleScreen() {
                 <Text style={styles.playerLabel}>{playerName}</Text>
                 
                 {/* Shield Bar Overlay */}
-                <View style={[styles.healthBar, { position: 'absolute', bottom: 22, height: 6, width: 140, backgroundColor: 'transparent', borderWidth: 0 }]}>
-                     <Animated.View style={[styles.healthFill, { 
-                         width: playerShieldAnim.interpolate({
-                             inputRange: [0, 100],
-                             outputRange: ['0%', '100%']
-                         }), 
-                         backgroundColor: "#ADD8E6", 
-                         opacity: 0.8 
-                     }]} />
-                 </View>
+                {playerShield > 0 && (
+                    <View style={[styles.healthBar, { position: 'absolute', bottom: 22, height: 6, width: 140, backgroundColor: 'transparent', borderWidth: 0, zIndex: 5 }]}>
+                         <Animated.View style={[styles.healthFill, { 
+                             width: playerShieldAnim.interpolate({
+                                 inputRange: [0, 100],
+                                 outputRange: ['0%', '100%']
+                             }), 
+                             backgroundColor: "#3498db", 
+                             opacity: 0.8,
+                             borderRadius: 4
+                         }]} />
+                     </View>
+                )}
 
                 {/* Health Bar */}
                 <View style={styles.healthBar}>
@@ -820,9 +843,10 @@ function BattleScreen() {
         )}
       </View>
 
-      {/* --- ATTACK BUTTONS --- */}
+      {/* --- ATTACK BUTTONS (BEAUTIFIED) --- */}
       <View style={styles.skillBox}>
         <View style={styles.skillRow}>
+          {/* Attack 1 */}
           <TouchableOpacity 
             style={[
                 styles.skillButton, 
@@ -831,11 +855,19 @@ function BattleScreen() {
             onPress={() => handleAction('attack', 0)}
             disabled={battleEnded || isAttacking}
           >
-            <Text style={styles.skillText}>{weaponStats.attacks[0]?.name}</Text>
-            <Text style={styles.skillDamage}>{weaponStats.attacks[0]?.damage.min}-{weaponStats.attacks[0]?.damage.max} DMG</Text>
-            <Text style={styles.skillCost}>{weaponStats.attacks[0]?.cost} EN</Text>
+            <View style={styles.skillIconContainer}>
+                <Ionicons name={weaponStats.attacks[0].icon || 'flash'} size={20} color="#333" />
+            </View>
+            <View style={styles.skillInfo}>
+                <Text style={styles.skillText}>{weaponStats.attacks[0]?.name}</Text>
+                <Text style={styles.skillDamage}>{weaponStats.attacks[0]?.damage.min}-{weaponStats.attacks[0]?.damage.max} DMG</Text>
+            </View>
+            <View style={styles.costBadge}>
+                <Text style={styles.costText}>{weaponStats.attacks[0]?.cost}</Text>
+            </View>
           </TouchableOpacity>
 
+          {/* Attack 2 */}
           <TouchableOpacity 
             style={[
                 styles.skillButton, 
@@ -844,31 +876,58 @@ function BattleScreen() {
             onPress={() => handleAction('attack', 1)}
             disabled={battleEnded || isAttacking}
           >
-            <Text style={styles.skillText}>{weaponStats.attacks[1]?.name}</Text>
-            {weaponStats.attacks[1]?.type === 'shield' ? (
-                <Text style={[styles.skillDamage, {color: '#3498db'}]}>Shield +{weaponStats.attacks[1]?.effectValue}</Text>
-            ) : (
-                <Text style={styles.skillDamage}>{weaponStats.attacks[1]?.damage.min}-{weaponStats.attacks[1]?.damage.max} DMG</Text>
-            )}
-            <Text style={styles.skillCost}>{weaponStats.attacks[1]?.cost} EN</Text>
+            <View style={styles.skillIconContainer}>
+                <Ionicons name={weaponStats.attacks[1].icon || 'flame'} size={20} color="#333" />
+            </View>
+            <View style={styles.skillInfo}>
+                <Text style={styles.skillText}>{weaponStats.attacks[1]?.name}</Text>
+                {weaponStats.attacks[1]?.type === 'shield' ? (
+                    <Text style={[styles.skillDamage, {color: '#3498db'}]}>Shield +{weaponStats.attacks[1]?.effectValue}</Text>
+                ) : (
+                    <Text style={styles.skillDamage}>{weaponStats.attacks[1]?.damage.min}-{weaponStats.attacks[1]?.damage.max} DMG</Text>
+                )}
+            </View>
+            <View style={styles.costBadge}>
+                <Text style={styles.costText}>{weaponStats.attacks[1]?.cost}</Text>
+            </View>
           </TouchableOpacity>
         </View>
+        
         <View style={styles.skillRow}>
+          {/* Ultimate (Locked) */}
           <TouchableOpacity style={[styles.skillButton, styles.skillButtonDisabled]} disabled={true}>
-            <Text style={styles.skillText}>Ultimate</Text>
-            <Text style={styles.skillDamage}>Locked</Text>
+            <View style={styles.skillIconContainer}>
+                <Ionicons name="star" size={20} color="#666" />
+            </View>
+            <View style={styles.skillInfo}>
+                <Text style={styles.skillText}>Ultimate</Text>
+                <Text style={styles.skillDamage}>Locked</Text>
+            </View>
+            <View style={[styles.costBadge, {backgroundColor: '#777'}]}>
+                <Ionicons name="lock-closed" size={10} color="#FFF" />
+            </View>
           </TouchableOpacity>
+
+          {/* Repair */}
           <TouchableOpacity 
              style={[
                  styles.skillButton, 
+                 styles.repairButton,
                  (battleEnded || isAttacking || playerEN < 15) ? styles.skillButtonDisabled : {}
              ]} 
              onPress={() => handleAction('repair')}
              disabled={battleEnded || isAttacking}
           >
-            <Text style={styles.skillText}>Repair</Text>
-            <Text style={[styles.skillDamage, {color: '#27AE60'}]}>Heal +150</Text>
-            <Text style={styles.skillCost}>15 EN</Text>
+             <View style={styles.skillIconContainer}>
+                <Ionicons name="medkit" size={20} color="#27AE60" />
+            </View>
+            <View style={styles.skillInfo}>
+                <Text style={styles.skillText}>Repair</Text>
+                <Text style={[styles.skillDamage, {color: '#27AE60'}]}>Heal +150</Text>
+            </View>
+            <View style={[styles.costBadge, {backgroundColor: '#27AE60'}]}>
+                <Text style={styles.costText}>15</Text>
+            </View>
           </TouchableOpacity>
         </View>
       </View>
@@ -1148,59 +1207,95 @@ const styles = StyleSheet.create({
   },
 
   skillBox: {
-      backgroundColor: "#F5F5F5", 
+      backgroundColor: "rgba(240, 240, 240, 0.95)", 
       borderTopWidth: 2, 
-      borderTopColor: "#B4B4B4",
-      paddingVertical: 10, 
+      borderTopColor: "#00BFFF",
+      paddingVertical: 12, 
       paddingHorizontal: 12, 
       position: 'absolute', 
-      bottom: 40, 
-      left: 12, 
-      right: 12,
-      borderRadius: 16, 
+      bottom: 20, 
+      left: 10, 
+      right: 10,
+      borderRadius: 20, 
       borderWidth: 2, 
-      borderColor: "#B4B4B4", 
-      elevation: 5,
+      borderColor: "#DDD", 
+      elevation: 10,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.3,
+      shadowRadius: 5,
   },
   skillRow: { 
       flexDirection: "row", 
       justifyContent: "space-between", 
       gap: 10, 
-      marginBottom: 6 
+      marginBottom: 8 
   },
   skillButton: { 
       flex: 1, 
-      backgroundColor: "#D8D8D8", 
-      borderRadius: 12, 
+      backgroundColor: "#FFFFFF", 
+      borderRadius: 14, 
       borderWidth: 1, 
-      borderColor: '#999', 
-      justifyContent: "center", 
+      borderColor: '#DDD', 
+      justifyContent: "space-between", 
       alignItems: "center", 
+      flexDirection: 'row',
       paddingVertical: 8, 
-      paddingHorizontal: 8, 
-      height: 50,
+      paddingHorizontal: 10, 
+      height: 55,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.1,
+      shadowRadius: 2,
+      elevation: 2,
+  },
+  repairButton: {
+      borderColor: '#27AE60',
+      backgroundColor: '#F0FFF4'
   },
   skillButtonDisabled: { 
-      backgroundColor: "#95A5A6", 
-      borderColor: '#7F8C8D', 
+      backgroundColor: "#E0E0E0", 
+      borderColor: '#999', 
       opacity: 0.6 
   },
+  skillIconContainer: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      backgroundColor: '#F5F5F5',
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginRight: 8,
+  },
+  skillInfo: {
+      flex: 1,
+      justifyContent: 'center',
+  },
   skillText: { 
-      fontWeight: "700", 
-      fontSize: 11, 
-      color: "#333" 
+      fontWeight: "800", 
+      fontSize: 12, 
+      color: "#333",
+      marginBottom: 2
   }, 
   skillDamage: { 
-      fontSize: 8, 
-      color: "#555", 
-      marginTop: 2 
-  },
-  skillCost: { 
       fontSize: 9, 
-      color: "#007AFF", 
-      fontWeight: 'bold', 
-      marginTop: 1 
+      color: "#666", 
+      fontWeight: '600'
   },
+  costBadge: { 
+      backgroundColor: "#007AFF", 
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      borderRadius: 8,
+      minWidth: 22,
+      alignItems: 'center',
+      justifyContent: 'center'
+  },
+  costText: {
+      color: '#FFF',
+      fontSize: 10,
+      fontWeight: 'bold'
+  }
 });
 
 export default BattleScreen;

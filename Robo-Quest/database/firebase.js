@@ -33,7 +33,8 @@ import {
   collection,
   onSnapshot,
   query,
-  where
+  where,
+  writeBatch
 } from "firebase/firestore";
 
 const firebaseConfig = {
@@ -80,5 +81,6 @@ export {
   collection,
   onSnapshot,
   query,
-  where
+  where,
+  writeBatch
 };
