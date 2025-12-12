@@ -982,15 +982,15 @@ function LoadoutScreen() {
         }
 
         if (chassis === "ChassisGeneralis") {
-            if (weapon === "WeaponCreativia") return scaleSize(6);
-            if (weapon === "WeaponGeneralis") return scaleSize(-2);;
+            if (weapon === "WeaponCreativia") return scaleSize(4);
+            if (weapon === "WeaponGeneralis") return scaleSize(-3);;
             if (weapon === "WeaponInnovare") return scaleSize(-11);
         }
     
         if (chassis === "ChassisCreativia") {
-            if (weapon === "WeaponCreativia") return 0;
-            if (weapon === "WeaponGeneralis") return scaleSize(-5);
-            if (weapon === "WeaponInnovare") return scaleSize(-11);
+            if (weapon === "WeaponCreativia") return scaleSize(-2);
+            if (weapon === "WeaponGeneralis") return scaleSize(-10);
+            if (weapon === "WeaponInnovare") return scaleSize(-18);
         }
 
         return 0;
