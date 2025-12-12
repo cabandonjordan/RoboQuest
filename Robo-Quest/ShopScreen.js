@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { auth, db, doc, getDoc, setDoc, onAuthStateChanged } from './database/firebase';
 
+// List of all possible parts (Innovare and Creativia only)
 const POSSIBLE_PARTS = [
   'WeaponInnovare', 'WeaponCreativia',
   'ChassisInnovare', 'ChassisCreativia',
@@ -33,27 +34,29 @@ const ShopScreen = () => {
   const chestScale = useRef(new Animated.Value(1)).current;
   const rewardScale = useRef(new Animated.Value(0)).current;
 
+  // Chest data with different probabilities for unowned parts
   const chestData = [
     { 
       type: "Common Chest", 
       price: 100, 
       id: "common",
-      unownedPartProbability: 0.3, 
+      unownedPartProbability: 0.3, // 30% chance for unowned part
     },
     { 
       type: "RARE Chest", 
       price: 250, 
       id: "rare",
-      unownedPartProbability: 0.6, 
+      unownedPartProbability: 0.6, // 60% chance for unowned part
     },
     { 
       type: "LEGENDARY Chest", 
       price: 750, 
       id: "legendary",
-      unownedPartProbability: 0.9, 
+      unownedPartProbability: 0.9, // 90% chance for unowned part
     },
   ];
 
+  // Load user data
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
@@ -70,16 +73,21 @@ const ShopScreen = () => {
       setIsLoading(true);
       const userId = user.uid;
       
+      // Load scrap coins
       const scrapRef = doc(db, 'Roboquest-Scrap', userId);
       const scrapSnap = await getDoc(scrapRef);
+      
       if (scrapSnap.exists()) {
+        // User already has scrap coins document
         const userCoins = scrapSnap.data().coins || 0;
         setScrapCoins(userCoins);
       } else {
+        // First time - initialize with 0 scrap coins
         await setDoc(scrapRef, { coins: 0 });
         setScrapCoins(0);
       }
 
+      // Load unlocked parts from Collection
       const collectionRef = doc(db, 'Roboquest-Collection', userId);
       const collectionSnap = await getDoc(collectionRef);
       
@@ -87,6 +95,7 @@ const ShopScreen = () => {
         const data = collectionSnap.data();
         setUnlockedParts(data.parts || []);
       } else {
+        // Initialize with default parts (WeaponGeneralis, ChassisGeneralis, WheelsGeneralis, EngineGeneralis)
         const defaultParts = ['WeaponGeneralis', 'ChassisGeneralis', 'WheelsGeneralis', 'EngineGeneralis'];
         await setDoc(collectionRef, { parts: defaultParts });
         setUnlockedParts(defaultParts);
@@ -117,10 +126,13 @@ const ShopScreen = () => {
           text: "Buy & Open", 
           style: "default",
           onPress: () => {
+            // Deduct coins
             const newScrapCoins = scrapCoins - chest.price;
             setScrapCoins(newScrapCoins);
             setSelectedChest(chest);
             setClickCount(0);
+            
+            // Save scrap coins to Firebase
             saveScrapCoins(newScrapCoins);
           }
         }
@@ -140,11 +152,19 @@ const ShopScreen = () => {
   };
 
   const getRandomPartWithProbability = (chestType) => {
+    // Get chest data based on type
     const chest = chestData.find(c => c.id === chestType);
     const probability = chest ? chest.unownedPartProbability : 0.3;
+    
+    // Get unowned parts
     const unownedParts = POSSIBLE_PARTS.filter(part => !unlockedParts.includes(part));
+    
+    // Get owned parts (for fallback)
     const ownedParts = POSSIBLE_PARTS.filter(part => unlockedParts.includes(part));
+    
+    // Check if there are unowned parts available
     if (unownedParts.length === 0) {
+      // All parts are owned, return random owned part
       const randomIndex = Math.floor(Math.random() * ownedParts.length);
       return {
         part: ownedParts[randomIndex],
@@ -152,7 +172,9 @@ const ShopScreen = () => {
       };
     }
     
+    // Check if there are owned parts available (for probability calculation)
     if (ownedParts.length === 0) {
+      // No parts owned yet, always give unowned
       const randomIndex = Math.floor(Math.random() * unownedParts.length);
       return {
         part: unownedParts[randomIndex],
@@ -160,15 +182,18 @@ const ShopScreen = () => {
       };
     }
     
+    // Use probability to decide if we should give an unowned part
     const random = Math.random();
     
     if (random < probability) {
+      // Give unowned part
       const randomIndex = Math.floor(Math.random() * unownedParts.length);
       return {
         part: unownedParts[randomIndex],
         wasUnowned: true
       };
     } else {
+      // Give owned part
       const randomIndex = Math.floor(Math.random() * ownedParts.length);
       return {
         part: ownedParts[randomIndex],
@@ -178,7 +203,7 @@ const ShopScreen = () => {
   };
 
   const getRandomScrapAmount = () => {
-    return Math.floor(Math.random() * 51) + 50;
+    return Math.floor(Math.random() * 51) + 50; // Random between 50-100
   };
 
   const handleOpenAnimation = async () => {
@@ -201,6 +226,7 @@ const ShopScreen = () => {
       ]).start();
 
     } else {
+      // Final tap - open chest and get reward
       const { part, wasUnowned } = getRandomPartWithProbability(selectedChest.id);
       const userAlreadyHasPart = unlockedParts.includes(part);
       
@@ -208,9 +234,11 @@ const ShopScreen = () => {
       let rewardType = 'part';
       let rewardText = '';
 
+      // Check if part is actually new (double-check with wasUnowned flag)
       const isActuallyNew = wasUnowned && !userAlreadyHasPart;
       
       if (!isActuallyNew) {
+        // Either it wasn't meant to be unowned or user already has it
         scrapGained = getRandomScrapAmount();
         rewardType = 'scrap';
         
@@ -220,16 +248,19 @@ const ShopScreen = () => {
           rewardText = `Duplicate ${getPartDisplayName(part)}! Converted to ${scrapGained} scrap coins.`;
         }
         
+        // Add scrap coins
         const newTotalScrap = scrapCoins + scrapGained;
         setScrapCoins(newTotalScrap);
         await saveScrapCoins(newTotalScrap);
         
       } else {
+        // New part!
         const updatedParts = [...unlockedParts, part];
         setUnlockedParts(updatedParts);
         rewardType = 'part';
         rewardText = `You got a new part: ${getPartDisplayName(part)}!`;
         
+        // Save to Collection in Firebase
         await saveNewPart(part, updatedParts);
       }
 
@@ -257,8 +288,10 @@ const ShopScreen = () => {
           useNativeDriver: true,
         })
       ]).start(() => {
+        // Show reward modal
         setShowRewardModal(true);
         
+        // Animate reward appearing
         Animated.spring(rewardScale, {
           toValue: 1,
           tension: 10,
@@ -275,6 +308,8 @@ const ShopScreen = () => {
     try {
       const collectionRef = doc(db, 'Roboquest-Collection', currentUser.uid);
       await setDoc(collectionRef, { parts: updatedParts }, { merge: true });
+      
+      // Also update the Loadout presets if needed
       await updateLoadoutPresets();
     } catch (error) {
       console.log("Error saving new part:", error);
@@ -285,12 +320,16 @@ const ShopScreen = () => {
     if (!currentUser) return;
     
     try {
+      // Load current loadout presets
       const loadoutRef = doc(db, 'Roboquest-Loadout', currentUser.uid);
       const loadoutSnap = await getDoc(loadoutRef);
       
       if (loadoutSnap.exists()) {
+        // Presets already exist, no need to update
         return;
       }
+      
+      // Create default presets for new users
       const defaultPreset = {
         Default: {
           Chassis: 'ChassisGeneralis',
@@ -312,6 +351,7 @@ const ShopScreen = () => {
   };
 
   const handleCloseReward = () => {
+    // Animate reward disappearing
     Animated.timing(rewardScale, {
       toValue: 0,
       duration: 200,
@@ -319,6 +359,8 @@ const ShopScreen = () => {
     }).start(() => {
       setShowRewardModal(false);
       setSelectedChest(null);
+      
+      // Reset animations
       chestScale.setValue(1);
       rewardScale.setValue(0);
     });
@@ -352,9 +394,9 @@ const ShopScreen = () => {
   };
 
   const getProbabilityColor = (probability) => {
-    if (probability >= 0.9) return '#FFD700'; 
-    if (probability >= 0.6) return '#4A90E2'; 
-    return '#8B8B8B'; 
+    if (probability >= 0.9) return '#FFD700'; // Gold for 90%+
+    if (probability >= 0.6) return '#4A90E2'; // Blue for 60%+
+    return '#8B8B8B'; // Gray for 30%
   };
 
   const getChestColor = (chestId) => {
@@ -367,6 +409,7 @@ const ShopScreen = () => {
 
   return (
     <View style={styles.wrapper}>
+      {/* Scrap Coins Display */}
       <View style={styles.scrapContainer}>
         <View style={styles.coinIcon} />
         <Text style={styles.scrapText}>{scrapCoins} Scrap Coins</Text>
@@ -666,7 +709,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  // Reward Styles
+  // Reward Modal Styles
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.8)',

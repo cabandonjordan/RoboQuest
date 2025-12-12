@@ -5,6 +5,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { LogBox } from 'react-native';
 import BackgroundMusicManager from './services/BackgroundMusicManager';
+import { AudioProvider } from './contexts/AudioContext';
 
 // Import all screen components
 import LoadingScreen from './LoadingScreen';
@@ -40,21 +41,26 @@ const Stack = createNativeStackNavigator();
 function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [currentScreen, setCurrentScreen] = useState('');
+  const [previousScreen, setPreviousScreen] = useState('');
 
-  // Initialize background music when app starts
+  // Initialize background music when app starts (after loading screen)
   useEffect(() => {
-    BackgroundMusicManager.initializeMusic();
+    // Only initialize and play music after loading is complete
+    if (!isLoading) {
+      BackgroundMusicManager.initializeMusic().then(() => {
+        BackgroundMusicManager.playMusic();
+      });
+    }
     
     // Cleanup on unmount
     return () => {
       BackgroundMusicManager.unloadMusic();
     };
-  }, []);
+  }, [isLoading]);
 
-  // Handle loading finish and start music
+  // Handle loading finish
   const handleLoadingFinish = () => {
     setIsLoading(false);
-    BackgroundMusicManager.playMusic();
   };
 
   // 🛠️ If in dev mode and DevScreen exists, show it
@@ -68,24 +74,31 @@ function App() {
   }
 
   return (
-    <NavigationContainer
-      onStateChange={(state) => {
-        // Get current route name
-        const route = state?.routes[state.index];
-        const routeName = route?.name;
-        
-        if (routeName) {
-          setCurrentScreen(routeName);
+    <AudioProvider>
+      <NavigationContainer
+        onStateChange={(state) => {
+          // Get current route name
+          const route = state?.routes[state.index];
+          const routeName = route?.name;
           
-          // Pause music on Battle screen, play on all others
-          if (routeName === 'Battle') {
-            BackgroundMusicManager.pauseMusic();
-          } else {
-            BackgroundMusicManager.playMusic();
+          if (routeName) {
+            // Check if we're exiting Battle screen
+            if (previousScreen === 'Battle' && routeName !== 'Battle') {
+              // Restart music from the beginning when exiting Battle
+              BackgroundMusicManager.restartMusic();
+            } else if (routeName === 'Battle' || routeName === 'LoginScreen' || routeName === 'TitleScreen') {
+              // Pause music on Battle screen and Login/Title screen
+              BackgroundMusicManager.pauseMusic();
+            } else {
+              // Play music on all other screens
+              BackgroundMusicManager.playMusic();
+            }
+            
+            setPreviousScreen(currentScreen);
+            setCurrentScreen(routeName);
           }
-        }
-      }}
-    >
+        }}
+      >
       <Stack.Navigator initialRouteName="LoginScreen">
         
         {/* Title Screen - First screen after loading */}
@@ -130,6 +143,7 @@ function App() {
         <Stack.Screen name="Shop" component={ShopScreen} />
       </Stack.Navigator>
     </NavigationContainer>
+    </AudioProvider>
   );
 }
 

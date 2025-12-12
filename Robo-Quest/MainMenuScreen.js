@@ -1236,8 +1236,8 @@ const questListStyles = StyleSheet.create({
     },
     closeButton: {
         position: 'absolute',
-        top: responsiveScale(4),
-        right: responsiveScale(8),
+        top: responsiveScale(10),
+        right: responsiveScale(10),
         width: responsiveScale(30),
         height: responsiveScale(30),
         borderRadius: responsiveScale(15),

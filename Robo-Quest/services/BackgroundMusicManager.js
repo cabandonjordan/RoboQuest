@@ -19,7 +19,7 @@ class BackgroundMusicManager {
 
       // Load the background music
       const { sound } = await Audio.Sound.createAsync(
-        require('../assets/music/background_music.mp3'),
+        require('../assets/music/background_music_official.mp3'),
         {
           isLooping: true,
           volume: 0.3, // Adjust volume as needed (0.0 to 1.0)
@@ -73,6 +73,20 @@ class BackgroundMusicManager {
       }
     } catch (error) {
       console.log('Error stopping background music:', error);
+    }
+  }
+
+  async restartMusic() {
+    try {
+      if (this.sound) {
+        await this.sound.stopAsync();
+        await this.sound.setPositionAsync(0);
+        await this.sound.playAsync();
+        this.isPlaying = true;
+        this.isPaused = false;
+      }
+    } catch (error) {
+      console.log('Error restarting background music:', error);
     }
   }
 
