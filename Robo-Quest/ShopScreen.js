@@ -8,7 +8,8 @@ import {
   Animated, 
   Easing,
   Alert,
-  Modal
+  Modal,
+  Image
 } from "react-native";
 import { auth, db, doc, getDoc, setDoc, onAuthStateChanged } from './database/firebase';
 
@@ -37,19 +38,19 @@ const ShopScreen = () => {
   // Chest data with different probabilities for unowned parts
   const chestData = [
     { 
-      type: "Common Chest", 
+      type: "COMMON CHEST", 
       price: 100, 
       id: "common",
       unownedPartProbability: 0.3, // 30% chance for unowned part
     },
     { 
-      type: "RARE Chest", 
+      type: "RARE CHEST", 
       price: 250, 
       id: "rare",
       unownedPartProbability: 0.6, // 60% chance for unowned part
     },
     { 
-      type: "LEGENDARY Chest", 
+      type: "LEGENDARY CHEST", 
       price: 750, 
       id: "legendary",
       unownedPartProbability: 0.9, // 90% chance for unowned part
@@ -407,6 +408,14 @@ const ShopScreen = () => {
     }
   };
 
+  const getChestImage = (chestId) => {
+    switch(chestId) {
+      case 'legendary': return require('./assets/shop/Legendary_Chest_Closed.png');
+      case 'rare': return require('./assets/shop/Rare_Chest_Closed.png');
+      default: return require('./assets/shop/Common1_Chest_Closed.png');
+    }
+  };
+
   return (
     <View style={styles.wrapper}>
       {/* Scrap Coins Display */}
@@ -438,10 +447,11 @@ const ShopScreen = () => {
                 onPress={() => handleChestPress(chest)}
                 disabled={scrapCoins < chest.price}
               >
-                <View style={[
-                  styles.chestIcon,
-                  { backgroundColor: chestColor, borderColor: chestColor }
-                ]} />
+                <Image 
+                  source={getChestImage(chest.id)}
+                  style={styles.chestIcon}
+                  resizeMode="contain"
+                />
                 <Text style={styles.chestTitle}>{chest.type}</Text>
                 <Text style={styles.price}>{chest.price} Scrap Coins</Text>
                 
@@ -461,15 +471,15 @@ const ShopScreen = () => {
         </ScrollView>
       ) : (
         <View style={styles.centerChestContainer}>
-          <Animated.View 
+          <Animated.Image 
+            source={getChestImage(selectedChest.id)}
             style={[
               styles.chestIconLarge,
               { 
-                backgroundColor: getChestColor(selectedChest.id),
-                borderColor: getChestColor(selectedChest.id),
                 transform: [{ scale: chestScale }] 
               }
-            ]} 
+            ]}
+            resizeMode="contain"
           />
           
           <Text style={styles.openText}>
@@ -624,11 +634,9 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   chestIcon: {
-    width: 80,
-    height: 80,
-    borderRadius: 10,
+    width: 120,
+    height: 120,
     marginBottom: 15,
-    borderWidth: 4,
   },
   chestTitle: {
     fontSize: 20,
@@ -667,10 +675,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   chestIconLarge: {
-    width: 150,
-    height: 150,
-    borderRadius: 20,
-    borderWidth: 6,
+    width: 200,
+    height: 200,
   },
   openText: {
     marginTop: 30,
