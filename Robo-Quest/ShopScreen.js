@@ -1,5 +1,5 @@
 import React, { useState, useRef } from "react";
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Animated, Easing } from "react-native";
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Animated, Easing, Image } from "react-native";
 
 const ShopScreen = () => {
   const [selectedChest, setSelectedChest] = useState(null);
@@ -48,7 +48,11 @@ const ShopScreen = () => {
         <ScrollView contentContainerStyle={styles.scrollContent}>
           {chestData.map((chest, index) => (
             <TouchableOpacity key={index} style={styles.card} onPress={() => handleChestPress(chest)}>
-              <View style={styles.chestIcon} />
+              {chest.type === "Common Chest" ? (
+                <Image source={require('./assets/shop/Common1_Chest_Closed.png')} style={styles.chestIcon} />
+              ) : (
+                <View style={styles.chestIcon} />
+              )}
               <Text style={styles.chestTitle}>{chest.type}</Text>
               <Text style={styles.price}>{chest.price}</Text>
             </TouchableOpacity>
@@ -82,21 +86,19 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: "#e3e3e3",
-    paddingVertical: 20,
+    paddingVertical: 40,
     alignItems: "center",
     borderRadius: 12,
     borderWidth: 3,
     borderColor: "gray",
     marginBottom: 20,
+    minHeight: 250,
   },
   chestIcon: {
-    width: 60,
-    height: 60,
-    backgroundColor: "#b7b7b7",
-    borderRadius: 8,
-    marginBottom: 10,
-    borderWidth: 3,
-    borderColor: "gray",
+    width: 140,
+    height: 140,
+    marginBottom: 15,
+    resizeMode: 'contain',
   },
   chestTitle: {
     fontSize: 18,
