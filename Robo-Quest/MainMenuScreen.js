@@ -11,10 +11,12 @@ import {
     ImageBackground,
     Easing,
     StatusBar,
-    Alert
+    Alert,
+    ActivityIndicator
 } from 'react-native'; 
 import { useNavigation, useIsFocused } from '@react-navigation/native';
-import { auth, db, doc, getDoc, onAuthStateChanged, updateDoc, setDoc } from './database/firebase';
+import { Ionicons } from '@expo/vector-icons';
+import { auth, db, doc, getDoc, onAuthStateChanged, updateDoc, setDoc, onSnapshot, writeBatch } from './database/firebase';
 
 // Color Used are in Hex and Rgba formats
 const Indent_Color = '#06DFDE';
@@ -443,13 +445,39 @@ const CameraScreenButton = ({ navigation }) => {
     );
 };
 
+// Debug function to log quest state
+const logQuestState = (quest, action) => {
+    console.log(`Quest ${action}:`, {
+        id: quest.id,
+        title: quest.title,
+        isCompleted: quest.isCompleted,
+        isClaimed: quest.isClaimed,
+        progress: quest.progress,
+        target: quest.target
+    });
+};
+
 // Quest Item Component
-const QuestItem = ({ quest, onClaim, userScrapCoins }) => {
+const QuestItem = ({ quest, onClaim, userScrapCoins, isClaiming }) => {
     const isCompleted = quest.isCompleted && !quest.isClaimed;
+    const isDisabled = quest.isClaimed || isClaiming || !isCompleted;
     const progressPercentage = (quest.progress / quest.target) * 100;
     const progressText = quest.type === QUEST_TYPES.DEFEAT_BOSS 
         ? "Defeat a boss in battle mode"
         : quest.description;
+    
+    const handleClaimPress = () => {
+        if (!isDisabled) {
+            onClaim(quest);
+        } else {
+            // Provide feedback for disabled button
+            if (quest.isClaimed) {
+                Alert.alert("Already Claimed", "You've already claimed the reward for this quest.");
+            } else if (!quest.isCompleted) {
+                Alert.alert("Not Completed", "Complete the quest requirements first.");
+            }
+        }
+    };
     
     return (
         <View style={questListStyles.questItem}>
@@ -479,16 +507,32 @@ const QuestItem = ({ quest, onClaim, userScrapCoins }) => {
             
             {isCompleted ? (
                 <TouchableOpacity 
-                    style={questListStyles.claimButton}
-                    onPress={() => onClaim(quest)}
-                    activeOpacity={0.8}
+                    style={[
+                        questListStyles.claimButton,
+                        isDisabled && questListStyles.claimButtonDisabled
+                    ]}
+                    onPress={handleClaimPress}
+                    activeOpacity={isDisabled ? 1 : 0.8}
+                    disabled={isDisabled}
                 >
-                    <Image source={ICONS.checkmark} style={questListStyles.claimIcon} />
-                    <Text style={questListStyles.claimText}>CLAIM {quest.reward} COINS</Text>
+                    {isClaiming ? (
+                        <ActivityIndicator color="#FFFFFF" size="small" />
+                    ) : quest.isClaimed ? (
+                        <>
+                            <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" />
+                            <Text style={questListStyles.claimText}>CLAIMED</Text>
+                        </>
+                    ) : (
+                        <>
+                            <Image source={ICONS.checkmark} style={questListStyles.claimIcon} />
+                            <Text style={questListStyles.claimText}>CLAIM {quest.reward} COINS</Text>
+                        </>
+                    )}
                 </TouchableOpacity>
             ) : quest.isClaimed ? (
                 <View style={questListStyles.claimedButton}>
-                    <Text style={questListStyles.claimedText}>✓ CLAIMED</Text>
+                    <Ionicons name="checkmark-circle" size={16} color={SUCCESS_GREEN} />
+                    <Text style={questListStyles.claimedText}>REWARD CLAIMED</Text>
                 </View>
             ) : (
                 <View style={questListStyles.incompleteButton}>
@@ -507,7 +551,9 @@ const QuestList = ({
     quests, 
     onClaimQuest,
     userScrapCoins,
-    onClose
+    onClose,
+    onRefresh,
+    claimingQuestId
 }) => {
     if (!show || !questIconLayout) return null; 
 
@@ -540,6 +586,12 @@ const QuestList = ({
             </TouchableOpacity>
             
             <View style={questListStyles.header}>
+                <TouchableOpacity 
+                    style={questListStyles.refreshButton}
+                    onPress={onRefresh}
+                >
+                    <Text style={questListStyles.refreshButtonText}>⟳</Text>
+                </TouchableOpacity>
                 <Text style={questListStyles.headerTitle}>DAILY QUESTS</Text>
                 <View style={questListStyles.coinDisplay}>
                     <Image source={ICONS.coin} style={questListStyles.headerCoinIcon} />
@@ -562,6 +614,7 @@ const QuestList = ({
                         quest={quest}
                         onClaim={onClaimQuest}
                         userScrapCoins={userScrapCoins}
+                        isClaiming={claimingQuestId === quest.id}
                     />
                 ))
             ) : (
@@ -892,6 +945,35 @@ const GrayHeader = ({ onQuestPress, onShopPress, onSettingsPress, showQuestList,
     );
 };
 
+// Helper function to calculate total boss wins
+const calculateTotalBossWins = (bossData) => {
+    if (!bossData) return 0;
+    
+    let totalWins = 0;
+    Object.values(bossData).forEach((bossStats) => {
+        if (bossStats && typeof bossStats === 'object') {
+            totalWins += bossStats.wins || 0;
+        }
+    });
+    return totalWins;
+};
+
+// Helper function to generate boss wins signature
+const generateBossWinsSignature = (bossData) => {
+    if (!bossData) return '';
+    
+    const winsArray = [];
+    Object.entries(bossData).forEach(([bossName, bossStats]) => {
+        if (bossStats && typeof bossStats === 'object') {
+            winsArray.push(`${bossName}:${bossStats.wins || 0}`);
+        }
+    });
+    
+    // Sort to ensure consistent signature
+    winsArray.sort();
+    return winsArray.join('|');
+};
+
 // Main Menu Screen Component
 function MainMenuScreen() {
     const navigation = useNavigation();
@@ -905,6 +987,118 @@ function MainMenuScreen() {
     const slideAnim = useRef(new Animated.Value(0)).current;
     const questIconRef = useRef(null);
     const [questIconLayout, setQuestIconLayout] = useState(null);
+    const [claimingQuestId, setClaimingQuestId] = useState(null);
+    
+    // Track boss defeat counts
+    const [totalBossWins, setTotalBossWins] = useState(0);
+    const [bossWinsSignature, setBossWinsSignature] = useState('');
+
+    // Function to check and update photo quest from Roboquest-Journal-Entry
+    const checkAndUpdatePhotoQuest = async (userId, currentQuests) => {
+        try {
+            // Load journal entry data
+            const journalRef = doc(db, 'Roboquest-Journal-Entry', userId);
+            const journalSnap = await getDoc(journalRef);
+            
+            if (!journalSnap.exists()) {
+                return currentQuests;
+            }
+            
+            const journalData = journalSnap.data();
+            const entries = journalData.entries || [];
+            const hasAnyPhotos = entries.length > 0;
+            
+            // Update quests based on photo status
+            const updatedQuests = currentQuests.map(quest => {
+                if (quest.type === QUEST_TYPES.TAKE_PICTURE && !quest.isCompleted && !quest.isClaimed) {
+                    if (hasAnyPhotos) {
+                        console.log("Photos detected in journal, updating take picture quest");
+                        return {
+                            ...quest,
+                            progress: 1,
+                            isCompleted: true,
+                            lastUpdated: new Date().toISOString()
+                        };
+                    }
+                }
+                return quest;
+            });
+            
+            return updatedQuests;
+            
+        } catch (error) {
+            console.log("Error checking photo quest:", error);
+            return currentQuests;
+        }
+    };
+
+    // Function to check and update boss quests - FIXED VERSION
+    const checkAndUpdateBossQuests = async (userId, currentQuests, previousSignature = '') => {
+        try {
+            const user = currentUser || auth.currentUser;
+            if (!user) return { 
+                updatedQuests: currentQuests, 
+                bossData: null, 
+                newSignature: previousSignature 
+            };
+            
+            const userName = user.displayName || user.email?.split('@')[0] || 'Player';
+            const docId = `${userName}-Roboquest-Boss`;
+            const bossRef = doc(db, 'Roboquest-Boss', docId);
+            const bossSnap = await getDoc(bossRef);
+            
+            if (!bossSnap.exists()) {
+                console.log("No boss data found");
+                return { 
+                    updatedQuests: currentQuests, 
+                    bossData: null, 
+                    newSignature: '' 
+                };
+            }
+            
+            const currentBossData = bossSnap.data();
+            const currentSignature = generateBossWinsSignature(currentBossData);
+            const currentTotalWins = calculateTotalBossWins(currentBossData);
+            
+            console.log("Current boss signature:", currentSignature);
+            console.log("Previous boss signature:", previousSignature);
+            console.log("Current total wins:", currentTotalWins);
+            
+            // Update quests if boss wins changed (increased)
+            const updatedQuests = currentQuests.map(quest => {
+                if (quest.type === QUEST_TYPES.DEFEAT_BOSS && !quest.isClaimed) {
+                    // Check if signature changed (boss wins increased)
+                    const signatureChanged = currentSignature !== previousSignature;
+                    const hasAnyWins = currentTotalWins > 0;
+                    
+                    if (signatureChanged && hasAnyWins && !quest.isCompleted) {
+                        console.log("Boss wins increased, marking quest as complete");
+                        return {
+                            ...quest,
+                            progress: 1,
+                            isCompleted: true,
+                            lastUpdated: new Date().toISOString()
+                        };
+                    }
+                }
+                return quest;
+            });
+            
+            return { 
+                updatedQuests, 
+                bossData: currentBossData, 
+                newSignature: currentSignature 
+            };
+            
+        } catch (error) {
+            console.log("Error checking boss quests:", error);
+            return { 
+                updatedQuests: currentQuests, 
+                bossData: null, 
+                newSignature: previousSignature 
+            };
+        }
+    };
 
     // Load user data including scrap coins and quests
     const loadUserData = async (user) => {
@@ -912,13 +1106,12 @@ function MainMenuScreen() {
             const userId = user.uid;
             
             // Load scrap coins
-            const scrapRef = doc(db, 'Roboquest-Scrap', userId);
+            const scrapRef = doc(db, 'Roboquest-Scraps', userId);
             const scrapSnap = await getDoc(scrapRef);
             if (scrapSnap.exists()) {
                 const scrapData = scrapSnap.data();
                 setUserScrapCoins(scrapData.coins || 0);
             } else {
-                // Initialize with 0 coins
                 await setDoc(scrapRef, { coins: 0 });
                 setUserScrapCoins(0);
             }
@@ -929,14 +1122,55 @@ function MainMenuScreen() {
             
             if (questsSnap.exists()) {
                 const questsData = questsSnap.data();
-                setQuests(questsData.quests || INITIAL_QUESTS);
+                let loadedQuests = questsData.quests || INITIAL_QUESTS;
+                
+                // Check boss defeat status
+                const { 
+                    updatedQuests: bossUpdatedQuests, 
+                    bossData, 
+                    newSignature 
+                } = await checkAndUpdateBossQuests(userId, loadedQuests, bossWinsSignature);
+                
+                // Check journal for take picture quest
+                const photoUpdatedQuests = await checkAndUpdatePhotoQuest(userId, bossUpdatedQuests);
+                
+                // Update quests in Firestore if they changed
+                if (JSON.stringify(photoUpdatedQuests) !== JSON.stringify(questsData.quests)) {
+                    await updateDoc(questsRef, {
+                        quests: photoUpdatedQuests,
+                        lastUpdated: new Date().toISOString()
+                    });
+                }
+                
+                setQuests(photoUpdatedQuests);
+                if (bossData) {
+                    setTotalBossWins(calculateTotalBossWins(bossData));
+                }
+                setBossWinsSignature(newSignature);
             } else {
                 // Initialize quests for new user
+                let initialQuests = INITIAL_QUESTS;
+                
+                // Check boss defeat status
+                const { 
+                    updatedQuests: bossUpdatedQuests, 
+                    bossData, 
+                    newSignature 
+                } = await checkAndUpdateBossQuests(userId, initialQuests, '');
+                
+                // Check journal for take picture quest
+                const photoUpdatedQuests = await checkAndUpdatePhotoQuest(userId, bossUpdatedQuests);
+                
                 await setDoc(questsRef, { 
-                    quests: INITIAL_QUESTS,
+                    quests: photoUpdatedQuests,
                     lastUpdated: new Date().toISOString()
                 });
-                setQuests(INITIAL_QUESTS);
+                
+                setQuests(photoUpdatedQuests);
+                if (bossData) {
+                    setTotalBossWins(calculateTotalBossWins(bossData));
+                }
+                setBossWinsSignature(newSignature);
             }
 
         } catch (error) {
@@ -958,6 +1192,11 @@ function MainMenuScreen() {
                 const questsData = questsSnap.data();
                 const updatedQuests = questsData.quests.map(quest => {
                     if (quest.type === questType && !quest.isClaimed) {
+                        // For boss quests, skip - they're handled by checkAndUpdateBossQuests
+                        if (quest.type === QUEST_TYPES.DEFEAT_BOSS) {
+                            return quest;
+                        }
+                        
                         const newProgress = Math.min(quest.progress + increment, quest.target);
                         const isNowCompleted = newProgress >= quest.target;
                         
@@ -987,19 +1226,44 @@ function MainMenuScreen() {
 
     // Claim quest reward
     const claimQuestReward = async (quest) => {
-        if (!currentUser || !quest.isCompleted || quest.isClaimed) return;
+        logQuestState(quest, "Claim Attempt");
+        
+        // Prevent multiple clicks on same quest
+        if (claimingQuestId === quest.id) {
+            console.log("Already claiming this quest:", quest.id);
+            return;
+        }
+        
+        // Double-check if quest is already claimed or not completed
+        if (!currentUser || !quest.isCompleted || quest.isClaimed) {
+            console.log("Cannot claim quest:", {
+                hasUser: !!currentUser,
+                isCompleted: quest.isCompleted,
+                isClaimed: quest.isClaimed,
+                questId: quest.id
+            });
+            Alert.alert("Cannot Claim", "This quest has already been claimed or is not yet completed.");
+            return;
+        }
+        
+        setClaimingQuestId(quest.id);
         
         try {
             const userId = currentUser.uid;
-            const newCoins = userScrapCoins + quest.reward;
             
-            // Update scrap coins
-            const scrapRef = doc(db, 'Roboquest-Scrap', userId);
-            await updateDoc(scrapRef, {
-                coins: newCoins
-            }, { merge: true });
+            // Use a batch to perform atomic operations
+            const batch = writeBatch(db);
             
-            // Mark quest as claimed
+            // 1. Get current scrap coins
+            const scrapRef = doc(db, 'Roboquest-Scraps', userId);
+            const scrapSnap = await getDoc(scrapRef);
+            const currentCoins = scrapSnap.exists() ? (scrapSnap.data().coins || 0) : 0;
+            const newCoins = currentCoins + quest.reward;
+            
+            // 2. Update scrap coins
+            batch.update(scrapRef, { coins: newCoins });
+            
+            // 3. Get current quests and mark this one as claimed
             const questsRef = doc(db, 'Roboquest-Quests', userId);
             const questsSnap = await getDoc(questsRef);
             
@@ -1010,30 +1274,43 @@ function MainMenuScreen() {
                         return {
                             ...q,
                             isClaimed: true,
-                            claimedAt: new Date().toISOString()
+                            claimedAt: new Date().toISOString(),
+                            claimedUserId: userId
                         };
                     }
                     return q;
                 });
                 
-                await updateDoc(questsRef, {
-                    quests: updatedQuests
+                // 4. Update quests
+                batch.update(questsRef, { 
+                    quests: updatedQuests,
+                    lastUpdated: new Date().toISOString()
                 });
                 
+                // 5. Commit the batch
+                await batch.commit();
+                
+                // 6. Update local state
                 setQuests(updatedQuests);
                 setUserScrapCoins(newCoins);
                 
-                // Show reward animation/confetti effect
+                // Reset claiming state
+                setClaimingQuestId(null);
+                
+                // 7. Show success message
                 Alert.alert(
                     "🎉 Reward Claimed!",
                     `You received ${quest.reward} scrap coins!\n\nNew balance: ${newCoins} coins`,
                     [{ text: "Awesome!" }]
                 );
+            } else {
+                throw new Error("Quests document not found");
             }
             
         } catch (error) {
             console.log("Error claiming quest reward:", error);
             Alert.alert("Error", "Failed to claim reward. Please try again.");
+            setClaimingQuestId(null);
         }
     };
 
@@ -1076,12 +1353,201 @@ function MainMenuScreen() {
         }
     };
 
+    // Real-time listener for boss updates - ONLY updates when boss wins increase
+    useEffect(() => {
+        if (!currentUser) return;
+        
+        const userName = currentUser.displayName || currentUser.email?.split('@')[0] || 'Player';
+        const docId = `${userName}-Roboquest-Boss`;
+        
+        // Listen for boss data updates
+        const bossRef = doc(db, 'Roboquest-Boss', docId);
+        const unsubscribe = onSnapshot(bossRef, async (docSnap) => {
+            if (docSnap.exists()) {
+                const currentBossData = docSnap.data();
+                const currentSignature = generateBossWinsSignature(currentBossData);
+                const currentTotalWins = calculateTotalBossWins(currentBossData);
+                
+                console.log("=== Real-time Boss Update ===");
+                console.log("Current signature:", currentSignature);
+                console.log("Previous signature:", bossWinsSignature);
+                console.log("Current total wins:", currentTotalWins);
+                console.log("Previous total wins:", totalBossWins);
+                
+                // Only proceed if signature changed (boss wins changed)
+                if (currentSignature !== bossWinsSignature) {
+                    const winsIncreased = currentTotalWins > totalBossWins;
+                    
+                    console.log("Wins increased?", winsIncreased);
+                    
+                    if (winsIncreased) {
+                        console.log("BOSS WINS INCREASED! Updating quest...");
+                        
+                        // Update quests locally
+                        setQuests(prevQuests => {
+                            const updatedQuests = prevQuests.map(quest => {
+                                if (quest.type === QUEST_TYPES.DEFEAT_BOSS && !quest.isCompleted && !quest.isClaimed) {
+                                    console.log("Marking boss quest as complete");
+                                    return {
+                                        ...quest,
+                                        progress: 1,
+                                        isCompleted: true,
+                                        lastUpdated: new Date().toISOString()
+                                    };
+                                }
+                                return quest;
+                            });
+                            
+                            // Update in Firestore if quests changed
+                            if (JSON.stringify(updatedQuests) !== JSON.stringify(prevQuests)) {
+                                const questsRef = doc(db, 'Roboquest-Quests', currentUser.uid);
+                                updateDoc(questsRef, {
+                                    quests: updatedQuests,
+                                    lastUpdated: new Date().toISOString()
+                                }).catch(error => {
+                                    console.log("Error updating quests in Firestore:", error);
+                                });
+                                
+                                // Show notification
+                                setTimeout(() => {
+                                    Alert.alert(
+                                        "🏆 Boss Defeated!",
+                                        "You defeated a boss! Check your quests to claim your reward.",
+                                        [{ text: "OK" }]
+                                    );
+                                }, 500);
+                            }
+                            
+                            return updatedQuests;
+                        });
+                    }
+                    
+                    // Update state regardless of increase (for next comparison)
+                    setTotalBossWins(currentTotalWins);
+                    setBossWinsSignature(currentSignature);
+                }
+            } else {
+                console.log("No boss document exists yet");
+                setTotalBossWins(0);
+                setBossWinsSignature('');
+            }
+        });
+        
+        return () => unsubscribe();
+    }, [currentUser, bossWinsSignature, totalBossWins]);
+
+    // Add real-time listener for journal updates (photos)
+    useEffect(() => {
+        if (!currentUser) return;
+        
+        // Listen for journal updates
+        const journalRef = doc(db, 'Roboquest-Journal-Entry', currentUser.uid);
+        const unsubscribe = onSnapshot(journalRef, (docSnap) => {
+            if (docSnap.exists()) {
+                const journalData = docSnap.data();
+                const entries = journalData.entries || [];
+                const hasAnyEntries = entries.length > 0;
+                
+                if (hasAnyEntries) {
+                    // Update quests locally
+                    setQuests(prevQuests => {
+                        const updatedQuests = prevQuests.map(quest => {
+                            if (quest.type === QUEST_TYPES.TAKE_PICTURE && !quest.isCompleted && !quest.isClaimed) {
+                                console.log("Entries detected in journal, updating take picture quest");
+                                return {
+                                    ...quest,
+                                    progress: 1,
+                                    isCompleted: true,
+                                    lastUpdated: new Date().toISOString()
+                                };
+                            }
+                            return quest;
+                        });
+                        
+                        // Update in Firestore if quests changed
+                        if (JSON.stringify(updatedQuests) !== JSON.stringify(prevQuests)) {
+                            const questsRef = doc(db, 'Roboquest-Quests', currentUser.uid);
+                            updateDoc(questsRef, {
+                                quests: updatedQuests,
+                                lastUpdated: new Date().toISOString()
+                            }).catch(error => {
+                                console.log("Error updating quests in Firestore:", error);
+                            });
+                        }
+                        
+                        return updatedQuests;
+                    });
+                }
+            }
+        });
+        
+        return () => unsubscribe();
+    }, [currentUser]);
+
+    // Manual refresh function for quests
+    const refreshQuests = async () => {
+        if (currentUser) {
+            setIsLoading(true);
+            await loadUserData(currentUser);
+            setIsLoading(false);
+            
+            // Check if any quests are now completable
+            const completableQuests = quests.filter(q => 
+                q.isCompleted && !q.isClaimed
+            ).length;
+            
+            if (completableQuests > 0) {
+                Alert.alert(
+                    "Quests Updated", 
+                    `${completableQuests} quest${completableQuests > 1 ? 's' : ''} ready to claim!`
+                );
+            } else {
+                Alert.alert("Quests Refreshed", "Quest status has been updated.");
+            }
+        }
+    };
+
+    // Debug function to check boss data
+    const debugBossData = async () => {
+        if (!currentUser) return;
+        
+        try {
+            const userName = currentUser.displayName || currentUser.email?.split('@')[0] || 'Player';
+            const docId = `${userName}-Roboquest-Boss`;
+            const bossRef = doc(db, 'Roboquest-Boss', docId);
+            const bossSnap = await getDoc(bossRef);
+            
+            console.log("=== DEBUG BOSS DATA ===");
+            console.log("Document ID:", docId);
+            console.log("Exists:", bossSnap.exists());
+            
+            if (bossSnap.exists()) {
+                const data = bossSnap.data();
+                console.log("Full data:", JSON.stringify(data, null, 2));
+                
+                let totalWins = 0;
+                Object.entries(data).forEach(([bossName, bossStats]) => {
+                    console.log(`${bossName}:`, bossStats);
+                    if (bossStats && typeof bossStats === 'object') {
+                        totalWins += bossStats.wins || 0;
+                    }
+                });
+                console.log("Total wins:", totalWins);
+            }
+            console.log("======================");
+        } catch (error) {
+            console.log("Debug error:", error);
+        }
+    };
+
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (user) {
                 setCurrentUser(user);
                 await loadCurrentLoadout(user);
                 await loadUserData(user);
+                // Debug: Check boss data on load
+                await debugBossData();
             }
             setIsLoading(false);
         });
@@ -1140,6 +1606,7 @@ function MainMenuScreen() {
         return (
             <SafeAreaView style={styles.safeArea}>
                 <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="large" color={LIGHT_BLUE} />
                     <Text style={styles.loadingText}>Loading...</Text>
                 </View>
             </SafeAreaView>
@@ -1158,6 +1625,8 @@ function MainMenuScreen() {
                 onClaimQuest={claimQuestReward}
                 userScrapCoins={userScrapCoins}
                 onClose={closeQuestList}
+                onRefresh={refreshQuests}
+                claimingQuestId={claimingQuestId}
             />
 
             <ImageBackground 
@@ -1217,6 +1686,8 @@ function MainMenuScreen() {
     );
 }
 
+// ... styles remain exactly the same ...
+
 const questListStyles = StyleSheet.create({
     container: {
         position: 'absolute',
@@ -1259,11 +1730,24 @@ const questListStyles = StyleSheet.create({
         paddingBottom: responsiveScale(10),
         borderBottomWidth: 1,
         borderBottomColor: ACCENT_GREY,
+        position: 'relative',
+    },
+    refreshButton: {
+        position: 'absolute',
+        left: 0,
+        padding: responsiveScale(5),
+    },
+    refreshButtonText: {
+        color: LIGHT_BLUE,
+        fontSize: responsiveFont(18),
+        fontWeight: 'bold',
     },
     headerTitle: {
         color: LIGHT_BLUE,
         fontSize: responsiveFont(18),
         fontWeight: 'bold',
+        flex: 1,
+        textAlign: 'center',
     },
     coinDisplay: {
         flexDirection: 'row',
@@ -1380,11 +1864,15 @@ const questListStyles = StyleSheet.create({
         borderRadius: responsiveScale(8),
         borderWidth: 1,
         borderColor: '#00AA55',
+        gap: responsiveScale(8),
+    },
+    claimButtonDisabled: {
+        backgroundColor: '#888888',
+        borderColor: '#666666',
     },
     claimIcon: {
         width: responsiveScale(16),
         height: responsiveScale(16),
-        marginRight: responsiveScale(8),
         tintColor: '#FFFFFF',
     },
     claimText: {
@@ -1410,6 +1898,9 @@ const questListStyles = StyleSheet.create({
         alignItems: 'center',
         borderWidth: 1,
         borderColor: SUCCESS_GREEN,
+        flexDirection: 'row',
+        justifyContent: 'center',
+        gap: responsiveScale(8),
     },
     claimedText: {
         color: SUCCESS_GREEN,
@@ -1458,6 +1949,7 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         backgroundColor: HEADER_COLOR,
+        gap: responsiveScale(16),
     },
     loadingText: {
         color: LIGHT_BLUE,

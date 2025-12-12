@@ -11,7 +11,7 @@ import {
   Modal,
   Image
 } from "react-native";
-import { auth, db, doc, getDoc, setDoc, onAuthStateChanged } from './database/firebase';
+import { auth, db, doc, getDoc, setDoc, onAuthStateChanged, updateDoc } from './database/firebase';
 
 // List of all possible parts (Innovare and Creativia only)
 const POSSIBLE_PARTS = [
@@ -20,6 +20,15 @@ const POSSIBLE_PARTS = [
   'WheelsInnovare', 'WheelsCreativia',
   'EngineInnovare', 'EngineCreativia'
 ];
+
+// Quest Types (same as in main menu)
+const QUEST_TYPES = {
+  DEFEAT_BOSS: 'defeat_boss',
+  OBTAIN_PARTS: 'obtain_parts',
+  OPEN_LEGENDARY_CHEST: 'open_legendary_chest',
+  TAKE_PICTURE: 'take_picture',
+  ACQUIRE_PARTS: 'acquire_parts'
+};
 
 const ShopScreen = () => {
   const [selectedChest, setSelectedChest] = useState(null);
@@ -75,7 +84,7 @@ const ShopScreen = () => {
       const userId = user.uid;
       
       // Load scrap coins
-      const scrapRef = doc(db, 'Roboquest-Scrap', userId);
+      const scrapRef = doc(db, 'Roboquest-Scraps', userId);
       const scrapSnap = await getDoc(scrapRef);
       
       if (scrapSnap.exists()) {
@@ -126,7 +135,7 @@ const ShopScreen = () => {
         { 
           text: "Buy & Open", 
           style: "default",
-          onPress: () => {
+          onPress: async () => {
             // Deduct coins
             const newScrapCoins = scrapCoins - chest.price;
             setScrapCoins(newScrapCoins);
@@ -134,7 +143,12 @@ const ShopScreen = () => {
             setClickCount(0);
             
             // Save scrap coins to Firebase
-            saveScrapCoins(newScrapCoins);
+            await saveScrapCoins(newScrapCoins);
+            
+            // Update quest for opening legendary chest
+            if (chest.id === 'legendary') {
+              await updateQuestProgress(QUEST_TYPES.OPEN_LEGENDARY_CHEST, 1);
+            }
           }
         }
       ]
@@ -145,10 +159,103 @@ const ShopScreen = () => {
     if (!currentUser) return;
     
     try {
-      const scrapRef = doc(db, 'Roboquest-Scrap', currentUser.uid);
+      const scrapRef = doc(db, 'Roboquest-Scraps', currentUser.uid);
       await setDoc(scrapRef, { coins }, { merge: true });
     } catch (error) {
       console.log("Error saving scrap coins:", error);
+    }
+  };
+
+  // Update quest progress function
+  const updateQuestProgress = async (questType, increment = 1) => {
+    if (!currentUser) return;
+    
+    try {
+      const userId = currentUser.uid;
+      const questsRef = doc(db, 'Roboquest-Quests', userId);
+      const questsSnap = await getDoc(questsRef);
+      
+      if (questsSnap.exists()) {
+        const questsData = questsSnap.data();
+        const updatedQuests = questsData.quests.map(quest => {
+          if (quest.type === questType && !quest.isClaimed) {
+            const newProgress = Math.min(quest.progress + increment, quest.target);
+            const isNowCompleted = newProgress >= quest.target;
+            
+            return {
+              ...quest,
+              progress: newProgress,
+              isCompleted: isNowCompleted,
+              lastUpdated: new Date().toISOString()
+            };
+          }
+          return quest;
+        });
+        
+        await updateDoc(questsRef, {
+          quests: updatedQuests,
+          lastUpdated: new Date().toISOString()
+        });
+        
+        console.log(`Quest ${questType} updated successfully`);
+      }
+    } catch (error) {
+      console.log("Error updating quest progress:", error);
+    }
+  };
+
+  // Update part-related quests
+  const updatePartQuests = async (newPart) => {
+    if (!currentUser) return;
+    
+    try {
+      const userId = currentUser.uid;
+      const questsRef = doc(db, 'Roboquest-Quests', userId);
+      const questsSnap = await getDoc(questsRef);
+      
+      if (questsSnap.exists()) {
+        const questsData = questsSnap.data();
+        const updatedQuests = questsData.quests.map(quest => {
+          // Update obtain_parts quest
+          if (quest.type === QUEST_TYPES.OBTAIN_PARTS && !quest.isClaimed) {
+            const newProgress = Math.min(quest.progress + 1, quest.target);
+            const isNowCompleted = newProgress >= quest.target;
+            
+            return {
+              ...quest,
+              progress: newProgress,
+              isCompleted: isNowCompleted,
+              lastUpdated: new Date().toISOString()
+            };
+          }
+          
+          // Update acquire_parts quest
+          if (quest.type === QUEST_TYPES.ACQUIRE_PARTS && !quest.isClaimed) {
+            // For simplicity, increment by 1 when any new part is acquired
+            // In a more complex system, you'd track specific part types
+            const newProgress = Math.min(quest.progress + 1, quest.target);
+            const isNowCompleted = newProgress >= quest.target;
+            
+            return {
+              ...quest,
+              progress: newProgress,
+              isCompleted: isNowCompleted,
+              lastUpdated: new Date().toISOString()
+            };
+          }
+          
+          return quest;
+        });
+        
+        await updateDoc(questsRef, {
+          quests: updatedQuests,
+          lastUpdated: new Date().toISOString()
+        });
+        
+        console.log("Part-related quests updated successfully");
+      }
+    } catch (error) {
+      console.log("Error updating part quests:", error);
     }
   };
 
@@ -263,6 +370,9 @@ const ShopScreen = () => {
         
         // Save to Collection in Firebase
         await saveNewPart(part, updatedParts);
+        
+        // Update quests for obtaining new parts
+        await updatePartQuests(part);
       }
 
       // Show reward animation
