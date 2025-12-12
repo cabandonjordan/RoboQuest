@@ -12,6 +12,8 @@ import Slider from '@react-native-community/slider';
 import { Audio } from 'expo-av';
 import BackgroundMusicManager from './services/BackgroundMusicManager';
 import { useAudio } from './contexts/AudioContext';
+// Added Firebase imports for Logout
+import { auth, signOut } from './database/firebase';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -47,11 +49,11 @@ function SettingsScreen() {
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [vibrationsEnabled, setVibrationsEnabled] = useState(false);
   const [showAudioModal, setShowAudioModal] = useState(false);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  // Changed from showDeleteModal to showLogoutModal
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
   const isInitialMount = useRef(true);
 
   // Control background music playback based on musicEnabled state
-  // Skip on initial mount to avoid restarting music when opening settings
   useEffect(() => {
     if (isInitialMount.current) {
       isInitialMount.current = false;
@@ -84,21 +86,32 @@ function SettingsScreen() {
     setShowAudioModal(false);
   };
 
-  const handleDeletePress = () => {
-    setShowDeleteModal(true);
+  // Replaces handleDeletePress
+  const handleLogoutPress = () => {
+    setShowLogoutModal(true);
   };
 
-  const handleCloseDeleteModal = () => {
+  // Replaces handleCloseDeleteModal
+  const handleCloseLogoutModal = () => {
     playButtonSound();
-    setShowDeleteModal(false);
+    setShowLogoutModal(false);
   };
 
-  const handleConfirmDelete = () => {
+  // Replaces handleConfirmDelete
+  const handleConfirmLogout = async () => {
     playButtonSound();
-    console.log('Account deletion confirmed');
-    // Add actual account deletion logic here
-    setShowDeleteModal(false);
-    // navigation.navigate('LoginScreen'); // Navigate to login after deletion
+    try {
+        await signOut(auth);
+        setShowLogoutModal(false);
+        // Navigate back to LoginScreen and reset history so user can't go back
+        navigation.reset({
+            index: 0,
+            routes: [{ name: 'LoginScreen' }],
+        });
+    } catch (error) {
+        console.error("Error logging out: ", error);
+        setShowLogoutModal(false);
+    }
   };
 
   return (
@@ -119,8 +132,9 @@ function SettingsScreen() {
 
           <View style={styles.gridRow}>
             <BlueButton style={styles.gridItem}>Change Name</BlueButton>
-            <TouchableOpacity style={[styles.blueButton, styles.gridItem, styles.deleteButton]} onPress={() => { playButtonSound(); handleDeletePress(); }} activeOpacity={0.8}>
-              <Text style={styles.blueButtonText}>Delete Account</Text>
+            {/* Updated button to Log Out */}
+            <TouchableOpacity style={[styles.blueButton, styles.gridItem, styles.logoutButton]} onPress={() => { playButtonSound(); handleLogoutPress(); }} activeOpacity={0.8}>
+              <Text style={styles.blueButtonText}>Log Out</Text>
             </TouchableOpacity>
           </View>
 
@@ -225,31 +239,31 @@ function SettingsScreen() {
         </View>
       )}
 
-      {/* Delete Account Confirmation Modal */}
-      {showDeleteModal && (
+      {/* Log Out Confirmation Modal (Replaces Delete Modal) */}
+      {showLogoutModal && (
         <View style={styles.audioModalOverlay}>
-          <View style={styles.deleteModalContainer}>
-            <View style={styles.deleteModalHeader}>
-              <Text style={styles.deleteModalTitle}>Delete Account</Text>
-              <TouchableOpacity style={styles.modalCloseButton} onPress={handleCloseDeleteModal}>
+          <View style={styles.logoutModalContainer}>
+            <View style={styles.logoutModalHeader}>
+              <Text style={styles.logoutModalTitle}>Log Out</Text>
+              <TouchableOpacity style={styles.modalCloseButton} onPress={handleCloseLogoutModal}>
                 <Text style={styles.closeText}>✕</Text>
               </TouchableOpacity>
             </View>
 
-            <View style={styles.deleteContent}>
-              <Text style={styles.deleteWarningText}>
-                Are you sure you want to delete your account?
+            <View style={styles.logoutContent}>
+              <Text style={styles.logoutWarningText}>
+                Are you sure you want to log out?
               </Text>
-              <Text style={styles.deleteSubText}>
-                This action cannot be undone. All your data will be permanently deleted.
+              <Text style={styles.logoutSubText}>
+                You will be returned to the login screen.
               </Text>
 
-              <View style={styles.deleteButtonsRow}>
-                <TouchableOpacity style={styles.cancelButton} onPress={handleCloseDeleteModal}>
+              <View style={styles.logoutButtonsRow}>
+                <TouchableOpacity style={styles.cancelButton} onPress={handleCloseLogoutModal}>
                   <Text style={styles.cancelButtonText}>Cancel</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.confirmDeleteButton} onPress={handleConfirmDelete}>
-                  <Text style={styles.confirmDeleteText}>Delete</Text>
+                <TouchableOpacity style={styles.confirmLogoutButton} onPress={handleConfirmLogout}>
+                  <Text style={styles.confirmLogoutText}>Log Out</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -258,7 +272,9 @@ function SettingsScreen() {
       )}
     </View>
   );
-}const styles = StyleSheet.create({
+}
+
+const styles = StyleSheet.create({
   screenContainer: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
@@ -460,12 +476,12 @@ function SettingsScreen() {
     width: '100%',
     height: 40,
   },
-  // Delete Button Style
-  deleteButton: {
-    backgroundColor: '#e74c3c',
+  // Logout Button Style (formerly Delete Button)
+  logoutButton: {
+    backgroundColor: '#e74c3c', // Kept red as requested/common for logout
   },
-  // Delete Confirmation Modal Styles
-  deleteModalContainer: {
+  // Logout Confirmation Modal Styles (formerly Delete Modal)
+  logoutModalContainer: {
     width: SCREEN_WIDTH * 0.85,
     maxWidth: 380,
     backgroundColor: '#5a6c7d',
@@ -475,14 +491,14 @@ function SettingsScreen() {
     padding: 20,
     paddingTop: 20,
   },
-  deleteModalHeader: {
+  logoutModalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 20,
     position: 'relative',
   },
-  deleteModalTitle: {
+  logoutModalTitle: {
     fontSize: 22,
     fontWeight: '800',
     textAlign: 'center',
@@ -502,26 +518,26 @@ function SettingsScreen() {
     justifyContent: 'center',
     alignItems: 'center',
   },
-  deleteContent: {
+  logoutContent: {
     backgroundColor: '#d4dce4',
     borderRadius: 8,
     padding: 20,
   },
-  deleteWarningText: {
+  logoutWarningText: {
     fontSize: 18,
     fontWeight: '700',
     color: '#2d3e50',
     textAlign: 'center',
     marginBottom: 15,
   },
-  deleteSubText: {
+  logoutSubText: {
     fontSize: 14,
     color: '#5a6c7d',
     textAlign: 'center',
     marginBottom: 25,
     lineHeight: 20,
   },
-  deleteButtonsRow: {
+  logoutButtonsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     gap: 10,
@@ -541,7 +557,7 @@ function SettingsScreen() {
     textAlign: 'center',
     textTransform: 'uppercase',
   },
-  confirmDeleteButton: {
+  confirmLogoutButton: {
     flex: 1,
     backgroundColor: '#e74c3c',
     paddingVertical: 14,
@@ -549,7 +565,7 @@ function SettingsScreen() {
     borderWidth: 3,
     borderColor: '#c0392b',
   },
-  confirmDeleteText: {
+  confirmLogoutText: {
     fontSize: 16,
     fontWeight: '800',
     color: '#fff',

@@ -6,7 +6,6 @@ import {
     TouchableOpacity, 
     Image, 
     SafeAreaView, 
-    ActivityIndicator, 
     ImageBackground, 
     Animated, 
     Alert, 
@@ -43,7 +42,10 @@ const BATTLE_ASSETS = {
         Block: require('./assets/battle/specialeffects/Block.png'),
         Dodge: require('./assets/battle/specialeffects/Dodge.png'),
         Power: require('./assets/battle/specialeffects/Power.png'),
-    }
+    },
+    loadingBg: require("./assets/background/NewLoadingBg.png"),
+    // Using settings icon as the cogwheel for loading
+    cogwheel: require("./assets/icons/settings.png")
 };
 
 const ASSETS = {
@@ -190,6 +192,7 @@ function BattleScreen() {
 
   const [loadout, setLoadout] = useState(DEFAULT_LOADOUT);
   const [isLoading, setIsLoading] = useState(true);
+  const [isExiting, setIsExiting] = useState(false);
   
   const [playerHP, setPlayerHP] = useState(650);
   const [playerMaxHP, setPlayerMaxHP] = useState(650);
@@ -224,6 +227,9 @@ function BattleScreen() {
   const playerShieldAnim = useRef(new Animated.Value(0)).current;
   const playerENAnim = useRef(new Animated.Value(50)).current;
 
+  // Cogwheel Animation Ref
+  const spinValue = useRef(new Animated.Value(0)).current;
+
   // Special Effects States
   const [playerEffect, setPlayerEffect] = useState({ type: null, visible: false });
   const [enemyEffect, setEnemyEffect] = useState({ type: null, visible: false });
@@ -234,6 +240,25 @@ function BattleScreen() {
     part: null, 
     isDuplicate: false, 
     conversionAmount: 0 
+  });
+
+  // Cogwheel loop animation
+  useEffect(() => {
+    if (isLoading || isExiting) {
+        Animated.loop(
+            Animated.timing(spinValue, {
+                toValue: 1,
+                duration: 2000,
+                easing: Easing.linear,
+                useNativeDriver: true
+            })
+        ).start();
+    }
+  }, [isLoading, isExiting]);
+
+  const spin = spinValue.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg']
   });
 
   // Sync Refs with State
@@ -273,7 +298,11 @@ function BattleScreen() {
           initializeBattle(DEFAULT_LOADOUT, 0);
         }
       }
-      setIsLoading(false);
+      
+      // Simulate a small delay for the loading screen effect
+      setTimeout(() => {
+        setIsLoading(false);
+      }, 1500);
     });
 
     return () => unsubscribe();
@@ -610,9 +639,17 @@ function BattleScreen() {
     });
   };
 
+  const handleExitTransition = () => {
+    setIsExiting(true);
+    setTimeout(() => {
+        navigation.navigate('Home');
+    }, 2000); 
+  };
+
   const handleSurrender = () => {
+      // If battle is already ended, the back button acts as a normal exit to menu
       if (battleEnded) {
-          navigation.goBack();
+          handleExitTransition();
           return;
       }
       
@@ -636,7 +673,9 @@ function BattleScreen() {
       );
   };
 
-  const handleReturnToMenu = () => navigation.navigate('Home');
+  const handleReturnToMenu = () => {
+    handleExitTransition();
+  };
 
   const handleNextBattle = () => {
       setBattleEnded(false);
@@ -675,11 +714,30 @@ function BattleScreen() {
     return 0;
   };
 
-  if (isLoading) {
+  // UPDATED LOADING VIEW WITH COGWHEEL ANIMATION & CENTERED TEXT
+  if (isLoading || isExiting) {
     return (
-      <SafeAreaView style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator size="large" color="#5CB85C" />
-      </SafeAreaView>
+      <ImageBackground 
+        source={BATTLE_ASSETS.loadingBg} 
+        style={styles.container}
+        resizeMode="cover"
+      >
+        <SafeAreaView style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+            <Animated.Image 
+                source={BATTLE_ASSETS.cogwheel} 
+                style={{ 
+                    transform: [{ rotate: spin }], 
+                    width: 80, 
+                    height: 80, 
+                    tintColor: '#FFFFFF' 
+                }} 
+                resizeMode="contain"
+            />
+            <Text style={styles.loadingText}>
+                {isExiting ? "RETURNING TO BASE..." : "LOADING BATTLE..."}
+            </Text>
+        </SafeAreaView>
+      </ImageBackground>
     );
   }
 
@@ -967,6 +1025,18 @@ const styles = StyleSheet.create({
   container: { 
       flex: 1 
   },
+  loadingText: {
+    marginTop: 20,
+    fontSize: 20, // Smaller font for better fit
+    fontWeight: 'bold',
+    color: 'white',
+    letterSpacing: 2,
+    textAlign: 'center', // Centered text
+    paddingHorizontal: 20, // Padding to prevent cutting off on sides
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 0, height: 3 },
+    textShadowRadius: 6,
+  },
   topOverlay: {
       position: 'absolute', 
       top: 0, 
@@ -1014,20 +1084,20 @@ const styles = StyleSheet.create({
   },
   innovareAttackEffect: { 
       position: 'absolute',
-      width: 300, 
-      height: 300,
-      top: 10,     
-      right: 40,
+      width: 340, 
+      height: 340,
+      top: 35,     
+      right: -10,
       zIndex: 99, 
   },
   creativiaAttackEffect: { 
       position: 'absolute',
       width: 340, 
       height: 340,
-      top: 30,     
+      top: 35,     
       right: -10,
       zIndex: 99,
-      transform: [{ rotate: '-15deg' }],
+      transform: [{ rotate: '15deg' }],
   },
   specialEffectContainer: {
       position: 'absolute', 

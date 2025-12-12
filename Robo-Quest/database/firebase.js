@@ -18,7 +18,8 @@ import {
   updatePassword,
   reauthenticateWithCredential,
   EmailAuthProvider,
-  deleteUser
+  deleteUser,
+  signOut
 } from "firebase/auth";
 import {
   getFirestore,
@@ -71,6 +72,7 @@ export {
   reauthenticateWithCredential,
   EmailAuthProvider,
   deleteUser,
+  signOut,
   doc,
   setDoc,
   getDocs,
