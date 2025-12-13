@@ -145,7 +145,7 @@ const TitleScreen = () => {
         {/* Centered Cogwheel Animation */}
         <View style={styles.gearContainer}>
           <Animated.Image 
-            source={require('./assets/icons/settings.png')}
+            source={require('./assets/loadingscreen/LoadingCircle.png')}
             style={[
               styles.gear,
               {
@@ -332,8 +332,8 @@ const styles = StyleSheet.create({
   gear: {
     width: 150, // Reduced from 250 for a cleaner look
     height: 150,
-    tintColor: '#FFFFFF',
-    shadowColor: "#FFAE00",
+    tintColor: '#00FFFF',
+    shadowColor: "#00ffff60",
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.8,
     shadowRadius: 20,
@@ -343,8 +343,8 @@ const styles = StyleSheet.create({
     width: 50,
     height: 50,
     borderRadius: 25,
-    backgroundColor: 'rgba(255, 174, 0, 0.4)',
-    shadowColor: "#FFAE00",
+    //backgroundColor: 'rgba(255, 174, 0, 0.4)',
+    //shadowColor: "#FFAE00",
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 1,
     shadowRadius: 30,
@@ -353,12 +353,12 @@ const styles = StyleSheet.create({
   playButton: {
     width: width * 0.75, // Slightly wider
     paddingVertical: 20,
-    backgroundColor: '#FFAE00', // Solid Orange background for Max Visibility
+    backgroundColor: '#00ccccff', // Solid Orange background for Max Visibility
     borderRadius: 30,
     marginBottom: 80,
     borderWidth: 2,
     borderColor: '#FFFFFF',
-    shadowColor: '#FFAE00',
+    shadowColor: '#00ccccff',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.6,
     shadowRadius: 15,

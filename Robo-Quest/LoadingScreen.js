@@ -135,7 +135,7 @@ export default function LoadingScreen({ onFinish }) {
         {/* Central Rotating Gear */}
         <View style={styles.gearContainer}>
           <Animated.Image 
-            source={require('./assets/icons/settings.png')}
+            source={require('./assets/loadingscreen/LoadingCircle.png')}
             style={[
               styles.gear,
               {
@@ -202,8 +202,8 @@ const styles = StyleSheet.create({
   gear: {
     width: 170, // Made smaller (was 200)
     height: 170,
-    tintColor: '#FFFFFF', 
-    shadowColor: "#FFAE00", 
+    tintColor: '#00FFFF', 
+    shadowColor: "#00FFFF", 
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.8,
     shadowRadius: 15,
@@ -217,7 +217,7 @@ const styles = StyleSheet.create({
     paddingBottom: 80, 
   },
   statusText: {
-    color: '#FFAE00', // Signature orange
+    color: '#00FFF', // Signature orange
     fontSize: 16,
     fontWeight: '900',
     letterSpacing: 3,
@@ -237,9 +237,9 @@ const styles = StyleSheet.create({
   },
   fill: {
     height: '100%',
-    backgroundColor: '#FFAE00',
+    backgroundColor: '#00FFFF',
     borderRadius: 3,
-    shadowColor: "#FFAE00",
+    shadowColor: "#00FFFF",
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 1,
     shadowRadius: 8,
