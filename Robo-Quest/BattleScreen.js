@@ -523,7 +523,6 @@ function BattleScreen() {
   };
 
   const handleAction = (actionType, actionIndex) => {
-// ... (rest of handleAction remains the same)
     if (isAttacking || battleEnded) return;
     setIsAttacking(true);
 
@@ -595,6 +594,41 @@ function BattleScreen() {
         setBattleLog(prev => [...prev, `-> Restored ${healAmount} HP`]);
         triggerEffect('player', 'Heal');
         finishPlayerTurn(0);
+    
+    // --- BASIC ATTACK (NEW ADDITION) ---
+    } else if (actionType === 'basic') {
+        setBattleLog(prev => [...prev, `Player used Basic Attack`]);
+        
+        // No Energy Cost
+        
+        setPlayerAnimVisible(true);
+        setTimeout(() => setPlayerAnimVisible(false), 600);
+
+        const hitRoll = Math.random();
+        let finalDamage = 0;
+
+        if (hitRoll < 0.15) { 
+            triggerEffect('enemy', 'Dodge');
+            setBattleLog(prev => [...prev, "-> Enemy dodged the attack!"]);
+        } else if (hitRoll < 0.25) {
+             // Block logic
+             finalDamage = Math.floor(calculateDamage({ min: 35, max: 50 }) * 0.5);
+             triggerEffect('enemy', 'Block');
+             setBattleLog(prev => [...prev, `-> Enemy blocked! (${finalDamage} dmg)`]);
+        } else {
+            // Normal hit
+            finalDamage = calculateDamage({ min: 35, max: 50 });
+            if (Math.random() < 0.2) {
+                // Critical Hit
+                finalDamage = Math.floor(finalDamage * 1.5);
+                triggerEffect('player', 'Power');
+                setBattleLog(prev => [...prev, `-> CRITICAL HIT! (${finalDamage} dmg)`]);
+            } else {
+                setBattleLog(prev => [...prev, `-> Dealt ${finalDamage} damage`]);
+            }
+        }
+
+        finishPlayerTurn(finalDamage);
     }
   };
 
@@ -1121,17 +1155,24 @@ function BattleScreen() {
         </View>
         
         <View style={styles.skillRow}>
-          {/* Ultimate (Locked) */}
-          <TouchableOpacity style={[styles.skillButton, styles.skillButtonDisabled]} disabled={true}>
-            <View style={styles.skillIconContainer}>
-                <Ionicons name="star" size={20} color="#666" />
+          {/* Basic Attack (Replaces Locked Ultimate) */}
+          <TouchableOpacity 
+             style={[
+                 styles.skillButton, 
+                 (battleEnded || isAttacking) ? styles.skillButtonDisabled : {}
+             ]} 
+             onPress={() => handleAction('basic')}
+             disabled={battleEnded || isAttacking}
+          >
+             <View style={styles.skillIconContainer}>
+                <Ionicons name="hammer-outline" size={20} color="#333" />
             </View>
             <View style={styles.skillInfo}>
-                <Text style={styles.skillText}>Ultimate</Text>
-                <Text style={styles.skillDamage}>Locked</Text>
+                <Text style={styles.skillText}>Basic Attack</Text>
+                <Text style={styles.skillDamage}>35-50 DMG</Text>
             </View>
-            <View style={[styles.costBadge, {backgroundColor: '#777'}]}>
-                <Ionicons name="lock-closed" size={10} color="#FFF" />
+            <View style={[styles.costBadge, {backgroundColor: '#555'}]}>
+                <Text style={styles.costText}>0</Text>
             </View>
           </TouchableOpacity>
 
