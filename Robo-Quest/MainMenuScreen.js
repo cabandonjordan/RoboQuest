@@ -125,7 +125,7 @@ const DEFAULT_LOADOUT = {
 
 // Quest Types
 const QUEST_TYPES = {
-    DEFEAT_BOSS: 'defeat_boss',
+    DEFEAT_ENEMY: 'defeat_enemy', // Changed from 'defeat_boss'
     OBTAIN_PARTS: 'obtain_parts',
     OPEN_LEGENDARY_CHEST: 'open_legendary_chest',
     TAKE_PICTURE: 'take_picture',
@@ -138,9 +138,9 @@ const QUEST_TYPES = {
 const INITIAL_QUESTS = [
     {
         id: 'quest_1_' + Date.now(),
-        type: QUEST_TYPES.DEFEAT_BOSS,
-        title: "Defeat Your First Boss",
-        description: "Successfully defeat any boss in battle mode",
+        type: QUEST_TYPES.DEFEAT_ENEMY, // Changed from DEFEAT_BOSS
+        title: "Defeat Your First Alien",
+        description: "Successfully defeat any alien enemy in battle mode",
         reward: 100,
         rewardType: 'scrap_coins',
         isCompleted: false,
@@ -180,9 +180,9 @@ const INITIAL_QUESTS = [
 // Add a pool of available quests to draw from
 const QUEST_POOL = [
     {
-        type: QUEST_TYPES.DEFEAT_BOSS,
-        title: "Boss Slayer",
-        description: "Defeat a boss in battle mode",
+        type: QUEST_TYPES.DEFEAT_ENEMY, // Changed from DEFEAT_BOSS
+        title: "Alien Hunter",
+        description: "Defeat any alien enemy in battle mode",
         reward: 100,
         rewardType: 'scrap_coins',
         target: 1
@@ -248,6 +248,45 @@ const generateNewQuest = () => {
         progress: 0,
         createdAt: new Date().toISOString()
     };
+};
+
+// Helper function to calculate total boss wins
+const calculateTotalBossWins = (bossData) => {
+    if (!bossData) return 0;
+    
+    let totalWins = 0;
+    Object.values(bossData).forEach((bossStats) => {
+        if (bossStats && typeof bossStats === 'object') {
+            totalWins += bossStats.wins || 0;
+        }
+    });
+    return totalWins;
+};
+
+// Helper function to generate boss wins signature
+const generateBossWinsSignature = (bossData) => {
+    if (!bossData) return '';
+    
+    const winsArray = [];
+    Object.entries(bossData).forEach(([bossName, bossStats]) => {
+        if (bossStats && typeof bossStats === 'object') {
+            winsArray.push(`${bossName}:${bossStats.wins || 0}`);
+        }
+    });
+    winsArray.sort();
+    return winsArray.join('|');
+};
+
+// Helper function to calculate total wins from signature
+const calculateTotalWinsFromSignature = (signature) => {
+    if (!signature) return 0;
+    let total = 0;
+    const pairs = signature.split('|');
+    pairs.forEach(pair => {
+        const [, winCount] = pair.split(':');
+        total += parseInt(winCount) || 0;
+    });
+    return total;
 };
 
 // SparkAnimation Component
@@ -511,8 +550,8 @@ const QuestItem = ({ quest, onClaim, userScrapCoins, isClaiming }) => {
     const isCompleted = quest.isCompleted && !quest.isClaimed;
     const isDisabled = quest.isClaimed || isClaiming || !isCompleted;
     const progressPercentage = (quest.progress / quest.target) * 100;
-    const progressText = quest.type === QUEST_TYPES.DEFEAT_BOSS 
-        ? "Defeat a boss in battle mode"
+    const progressText = quest.type === QUEST_TYPES.DEFEAT_ENEMY // Changed from DEFEAT_BOSS
+        ? "Defeat any alien enemy in battle mode"
         : quest.description;
     
     const handleClaimPress = () => {
@@ -983,31 +1022,75 @@ const GrayHeader = ({ onQuestPress, onShopPress, onSettingsPress, showQuestList,
     );
 };
 
-// Helper function to calculate total boss wins
-const calculateTotalBossWins = (bossData) => {
-    if (!bossData) return 0;
-    
-    let totalWins = 0;
-    Object.values(bossData).forEach((bossStats) => {
-        if (bossStats && typeof bossStats === 'object') {
-            totalWins += bossStats.wins || 0;
+// Function to check and update boss quests 
+const checkAndUpdateBossQuests = async (userId, currentQuests, previousSignature = '') => {
+    try {
+        const user = auth.currentUser;
+        if (!user) return { 
+            updatedQuests: currentQuests, 
+            bossData: null, 
+            newSignature: previousSignature 
+        };
+        
+        const userName = user.displayName || user.email?.split('@')[0] || 'Player';
+        const docId = `${userName}-Roboquest-Boss`;
+        const bossRef = doc(db, 'Roboquest-Boss', docId);
+        const bossSnap = await getDoc(bossRef);
+        
+        if (!bossSnap.exists()) {
+            console.log("No boss data found");
+            return { 
+                updatedQuests: currentQuests, 
+                bossData: null, 
+                newSignature: '' 
+            };
         }
-    });
-    return totalWins;
-};
-
-// Helper function to generate boss wins signature
-const generateBossWinsSignature = (bossData) => {
-    if (!bossData) return '';
-    
-    const winsArray = [];
-    Object.entries(bossData).forEach(([bossName, bossStats]) => {
-        if (bossStats && typeof bossStats === 'object') {
-            winsArray.push(`${bossName}:${bossStats.wins || 0}`);
-        }
-    });
-    winsArray.sort();
-    return winsArray.join('|');
+        
+        const currentBossData = bossSnap.data();
+        const currentSignature = generateBossWinsSignature(currentBossData);
+        const currentTotalWins = calculateTotalBossWins(currentBossData);
+        
+        console.log("Current boss signature:", currentSignature);
+        console.log("Previous boss signature:", previousSignature);
+        console.log("Current total wins:", currentTotalWins);
+        
+        // Calculate previous total wins from previous signature
+        const previousTotalWins = calculateTotalWinsFromSignature(previousSignature);
+        
+        // Only update quests if boss wins changed (increased)
+        const updatedQuests = currentQuests.map(quest => {
+            if (quest.type === QUEST_TYPES.DEFEAT_ENEMY && !quest.isClaimed) {
+                const signatureChanged = currentSignature !== previousSignature;
+                const winsIncreased = currentTotalWins > previousTotalWins;
+                
+                // CRITICAL: Only mark as complete if signature changed AND wins increased
+                if (signatureChanged && winsIncreased && !quest.isCompleted) {
+                    console.log("Enemy wins increased, marking quest as complete");
+                    return {
+                        ...quest,
+                        progress: 1,
+                        isCompleted: true,
+                        lastUpdated: new Date().toISOString()
+                    };
+                }
+            }
+            return quest;
+        });
+        
+        return { 
+            updatedQuests, 
+            bossData: currentBossData, 
+            newSignature: currentSignature 
+        };
+        
+    } catch (error) {
+        console.log("Error checking boss quests:", error);
+        return { 
+            updatedQuests: currentQuests, 
+            bossData: null, 
+            newSignature: previousSignature 
+        };
+    }
 };
 
 // Main Menu Screen Component
@@ -1094,73 +1177,6 @@ function MainMenuScreen() {
         }
     };
 
-    // Function to check and update boss quests 
-    const checkAndUpdateBossQuests = async (userId, currentQuests, previousSignature = '') => {
-        try {
-            const user = currentUser || auth.currentUser;
-            if (!user) return { 
-                updatedQuests: currentQuests, 
-                bossData: null, 
-                newSignature: previousSignature 
-            };
-            
-            const userName = user.displayName || user.email?.split('@')[0] || 'Player';
-            const docId = `${userName}-Roboquest-Boss`;
-            const bossRef = doc(db, 'Roboquest-Boss', docId);
-            const bossSnap = await getDoc(bossRef);
-            
-            if (!bossSnap.exists()) {
-                console.log("No boss data found");
-                return { 
-                    updatedQuests: currentQuests, 
-                    bossData: null, 
-                    newSignature: '' 
-                };
-            }
-            
-            const currentBossData = bossSnap.data();
-            const currentSignature = generateBossWinsSignature(currentBossData);
-            const currentTotalWins = calculateTotalBossWins(currentBossData);
-            
-            console.log("Current boss signature:", currentSignature);
-            console.log("Previous boss signature:", previousSignature);
-            console.log("Current total wins:", currentTotalWins);
-            
-            // Update quests if boss wins changed (increased)
-            const updatedQuests = currentQuests.map(quest => {
-                if (quest.type === QUEST_TYPES.DEFEAT_BOSS && !quest.isClaimed) {
-                    const signatureChanged = currentSignature !== previousSignature;
-                    const hasAnyWins = currentTotalWins > 0;
-                    
-                    if (signatureChanged && hasAnyWins && !quest.isCompleted) {
-                        console.log("Boss wins increased, marking quest as complete");
-                        return {
-                            ...quest,
-                            progress: 1,
-                            isCompleted: true,
-                            lastUpdated: new Date().toISOString()
-                        };
-                    }
-                }
-                return quest;
-            });
-            
-            return { 
-                updatedQuests, 
-                bossData: currentBossData, 
-                newSignature: currentSignature 
-            };
-            
-        } catch (error) {
-            console.log("Error checking boss quests:", error);
-            return { 
-                updatedQuests: currentQuests, 
-                bossData: null, 
-                newSignature: previousSignature 
-            };
-        }
-    };
-
     // Modified loadUserData function
     const loadUserData = async (user) => {
         try {
@@ -1187,15 +1203,15 @@ function MainMenuScreen() {
                 const questsData = questsSnap.data();
                 loadedQuests = (questsData.quests || []).filter(q => !q.isClaimed);
                 
-                // Check boss defeat status
+                // Check enemy defeat status
                 const { 
-                    updatedQuests: bossUpdatedQuests, 
+                    updatedQuests: enemyUpdatedQuests, 
                     bossData, 
                     newSignature 
                 } = await checkAndUpdateBossQuests(userId, loadedQuests, bossWinsSignature);
                 
                 // Check journal for take picture quest
-                const photoUpdatedQuests = await checkAndUpdatePhotoQuest(userId, bossUpdatedQuests);
+                const photoUpdatedQuests = await checkAndUpdatePhotoQuest(userId, enemyUpdatedQuests);
                 
                 // Ensure we have at least 3 quests
                 let finalQuests = photoUpdatedQuests;
@@ -1220,15 +1236,15 @@ function MainMenuScreen() {
                 // Initialize with 3 quests for new user
                 let initialQuests = INITIAL_QUESTS;
                 
-                // Check boss defeat status
+                // Check enemy defeat status
                 const { 
-                    updatedQuests: bossUpdatedQuests, 
+                    updatedQuests: enemyUpdatedQuests, 
                     bossData, 
                     newSignature 
                 } = await checkAndUpdateBossQuests(userId, initialQuests, '');
                 
                 // Check journal for take picture quest
-                const photoUpdatedQuests = await checkAndUpdatePhotoQuest(userId, bossUpdatedQuests);
+                const photoUpdatedQuests = await checkAndUpdatePhotoQuest(userId, enemyUpdatedQuests);
                 
                 await setDoc(questsRef, { 
                     quests: photoUpdatedQuests,
@@ -1262,7 +1278,7 @@ function MainMenuScreen() {
                 const questsData = questsSnap.data();
                 const updatedQuests = questsData.quests.map(quest => {
                     if (quest.type === questType && !quest.isClaimed) {
-                        if (quest.type === QUEST_TYPES.DEFEAT_BOSS) {
+                        if (quest.type === QUEST_TYPES.DEFEAT_ENEMY) {
                             return quest;
                         }
                         
@@ -1440,17 +1456,21 @@ function MainMenuScreen() {
                 
                 // Only proceed if signature changed (boss wins changed)
                 if (currentSignature !== bossWinsSignature) {
-                    const winsIncreased = currentTotalWins > totalBossWins;
+                    // Calculate previous total wins from previous signature
+                    const previousTotalWins = calculateTotalWinsFromSignature(bossWinsSignature);
+                    const winsIncreased = currentTotalWins > previousTotalWins;
                     
                     console.log("Wins increased?", winsIncreased);
+                    console.log("Previous total wins from signature:", previousTotalWins);
                     
+                    // CRITICAL FIX: Only mark quest as complete if wins actually increased
                     if (winsIncreased) {
-                        console.log("BOSS WINS INCREASED! Updating quest...");
+                        console.log("ENEMY WINS INCREASED! Updating quest...");
                         
                         setQuests(prevQuests => {
                             const updatedQuests = prevQuests.map(quest => {
-                                if (quest.type === QUEST_TYPES.DEFEAT_BOSS && !quest.isCompleted && !quest.isClaimed) {
-                                    console.log("Marking boss quest as complete");
+                                if (quest.type === QUEST_TYPES.DEFEAT_ENEMY && !quest.isCompleted && !quest.isClaimed) {
+                                    console.log("Marking enemy quest as complete");
                                     return {
                                         ...quest,
                                         progress: 1,
@@ -1461,7 +1481,9 @@ function MainMenuScreen() {
                                 return quest;
                             });
                             
-                            if (JSON.stringify(updatedQuests) !== JSON.stringify(prevQuests)) {
+                            // Only update Firestore if quest status actually changed
+                            const questChanged = JSON.stringify(updatedQuests) !== JSON.stringify(prevQuests);
+                            if (questChanged) {
                                 const questsRef = doc(db, 'Roboquest-Quests', currentUser.uid);
                                 updateDoc(questsRef, {
                                     quests: updatedQuests,
@@ -1475,6 +1497,7 @@ function MainMenuScreen() {
                         });
                     }
                     
+                    // Always update signature and total wins to track changes
                     setTotalBossWins(currentTotalWins);
                     setBossWinsSignature(currentSignature);
                 }
@@ -1486,7 +1509,7 @@ function MainMenuScreen() {
         });
         
         return () => unsubscribe();
-    }, [currentUser, bossWinsSignature, totalBossWins]);
+    }, [currentUser, bossWinsSignature]);
 
     // Real-time listener for journal entries
     useEffect(() => {
