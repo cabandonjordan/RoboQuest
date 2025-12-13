@@ -21,6 +21,7 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 // --- ASSETS ---
 const BATTLE_ASSETS = {
+// ... (rest of BATTLE_ASSETS remains the same)
     backgrounds: [
         require("./assets/background/BattleBGday.png"),
         require("./assets/background/BattleBGsunset.png"),
@@ -55,6 +56,7 @@ const BATTLE_ASSETS = {
 };
 
 const ASSETS = {
+// ... (rest of ASSETS remains the same)
   parts: {
     ChassisCreativia: require('./assets/parts/chassis/ChassisCreativia.png'),
     ChassisGeneralis: require('./assets/parts/chassis/ChassisGeneralis.png'),
@@ -87,6 +89,7 @@ const DEFAULT_LOADOUT = {
 
 // --- STATS CONFIGURATION ---
 const WEAPON_STATS = {
+// ... (rest of WEAPON_STATS remains the same)
   WeaponGeneralis: {
     name: 'Twin Anti-Air Guns',
     attacks: [
@@ -131,8 +134,20 @@ const ENEMY_DATA = [
     { name: "Big Mama", hp: 1400, baseDmg: 160, image: require("./assets/battle/enemies/EnemyLarge.png") }      // increased from 120
 ];
 
+// Helper function for linear boss progression logic
+const getNextBattleLevel = (lastDefeatedLevel, totalBosses) => {
+    // If all bosses are defeated, allow random replayability (post-game)
+    if (lastDefeatedLevel === totalBosses - 1) {
+        // Post-game replayability: Choose a random boss
+        return Math.floor(Math.random() * totalBosses); 
+    }
+    // Linear progression: Next undefeated boss
+    return lastDefeatedLevel + 1;
+};
+
 // Special Effect Component
 const SpecialEffectOverlay = ({ effect, visible, target }) => {
+// ... (rest of SpecialEffectOverlay remains the same)
     const fadeAnim = useRef(new Animated.Value(0)).current;
     const scaleAnim = useRef(new Animated.Value(0.5)).current;
     const translateY = useRef(new Animated.Value(0)).current;
@@ -225,9 +240,14 @@ function BattleScreen() {
   const [enemyLevel, setEnemyLevel] = useState(0); 
   const [currentBg, setCurrentBg] = useState(BATTLE_ASSETS.backgrounds[0]);
   
+  // NEW: Progression State (Level of the last boss successfully defeated, -1 for none)
+  const [lastDefeatedBossLevel, setLastDefeatedBossLevel] = useState(-1);
+  const lastDefeatedBossLevelRef = useRef(lastDefeatedBossLevel); 
+
   // Audio State
   const [sound, setSound] = useState();
 
+// ... (rest of animation states)
   // Animation States
   const [playerAnimVisible, setPlayerAnimVisible] = useState(false);
   const [enemyAnimVisible, setEnemyAnimVisible] = useState(false);
@@ -285,6 +305,11 @@ function BattleScreen() {
   useEffect(() => {
     playerHPRef.current = playerHP;
   }, [playerHP]);
+  
+  // NEW: Sync Progression Ref
+  useEffect(() => {
+    lastDefeatedBossLevelRef.current = lastDefeatedBossLevel;
+  }, [lastDefeatedBossLevel]);
 
   useEffect(() => {
     const randomBgIndex = Math.floor(Math.random() * BATTLE_ASSETS.backgrounds.length);
@@ -295,23 +320,49 @@ function BattleScreen() {
         setCurrentUser(user);
         const userName = user.displayName || user.email;
         setPlayerName(userName);
+        
+        let currentLoadout = DEFAULT_LOADOUT;
+        let lastDefeatedLevel = -1;
+        const totalBosses = ENEMY_DATA.length;
+
         try {
+          // 1. Load Loadout
           const docRef = doc(db, 'Roboquest-Loadout', user.uid);
           const docSnap = await getDoc(docRef);
           if (docSnap.exists()) {
             const data = docSnap.data();
             if (data.presets && data.presets.Default) {
-              setLoadout(data.presets.Default);
-              initializeBattle(data.presets.Default, 0); 
-            } else {
-              initializeBattle(DEFAULT_LOADOUT, 0);
+              currentLoadout = data.presets.Default;
             }
+          } 
+          setLoadout(currentLoadout); // Set loadout state
+
+          // 2. Load/Initialize Boss Progression State
+          const bossDocId = `${userName}-Roboquest-Boss`;
+          const bossStatsRef = doc(db, 'Roboquest-Boss', bossDocId);
+          const bossStatsSnap = await getDoc(bossStatsRef);
+          
+          if (bossStatsSnap.exists()) {
+             const bossData = bossStatsSnap.data();
+             // Load lastDefeatedBossLevel, default to -1 if not set
+             lastDefeatedLevel = bossData.lastDefeatedBossLevel !== undefined ? bossData.lastDefeatedBossLevel : -1;
           } else {
-            initializeBattle(DEFAULT_LOADOUT, 0);
+             // Initialize boss stats with progression field
+             await setDoc(bossStatsRef, { lastDefeatedBossLevel: -1 }, { merge: true });
           }
+          
+          setLastDefeatedBossLevel(lastDefeatedLevel);
+          lastDefeatedBossLevelRef.current = lastDefeatedLevel;
+
+          // 3. Determine Initial Battle Level
+          const initialLevel = getNextBattleLevel(lastDefeatedLevel, totalBosses);
+          
+          // 4. Initialize Battle with determined level
+          initializeBattle(currentLoadout, initialLevel); 
+
         } catch (error) {
-          console.log("Error loading loadout:", error);
-          initializeBattle(DEFAULT_LOADOUT, 0);
+          console.log("Error loading loadout/progression:", error);
+          initializeBattle(DEFAULT_LOADOUT, 0); // Fallback to Level 0
         }
       }
       
@@ -325,6 +376,7 @@ function BattleScreen() {
   }, []);
 
   // Animate Bars
+// ... (rest of bar animation useEffects remain the same)
   useEffect(() => {
     Animated.timing(playerHPAnim, {
         toValue: (playerHP / playerMaxHP) * 100,
@@ -359,6 +411,7 @@ function BattleScreen() {
   }, [playerEN, playerMaxEN]);
 
   // --- MUSIC LOGIC ---
+// ... (rest of music logic remains the same)
   const playBossMusic = async (level) => {
       try {
           // Unload any existing sound first
@@ -388,25 +441,27 @@ function BattleScreen() {
       }
   };
 
+  // UPDATED: initializeBattle now takes the specific level to load
   const initializeBattle = (currentLoadout, level) => {
     const chassis = CHASSIS_STATS[currentLoadout.Chassis] || CHASSIS_STATS.ChassisGeneralis;
     setPlayerMaxHP(chassis.hp);
     setPlayerHP(chassis.hp);
     setPlayerShield(0);
-    setPlayerEN(20); // EN starts at MAX (20)
+    setPlayerEN(20); 
     
     const currentEnemy = ENEMY_DATA[level] || ENEMY_DATA[0];
     setEnemyMaxHP(currentEnemy.hp);
     setEnemyHP(currentEnemy.hp);
-    setEnemyLevel(level);
+    setEnemyLevel(level); // Set the level based on progression logic from caller
     
     // Trigger the music for this specific level
     playBossMusic(level);
 
-    setBattleLog([`Battle Started against ${currentEnemy.name}!`]);
+    setBattleLog([`Battle Started against ${currentEnemy.name} (Lvl ${level + 1})!`]);
   };
 
   const triggerEffect = (target, type) => {
+// ... (rest of triggerEffect remains the same)
       if (target === 'player') {
           setPlayerEffect({ type: null, visible: false });
           setTimeout(() => setPlayerEffect({ type, visible: true }), 50);
@@ -416,6 +471,7 @@ function BattleScreen() {
       }
   };
 
+  // UPDATED: updateBattleStats to save new progression state
   const updateBattleStats = async (result, droppedPart = null) => {
       if (!currentUser) return;
       try {
@@ -424,7 +480,7 @@ function BattleScreen() {
           const statsSnap = await getDoc(statsRef);
           
           const currentBossName = ENEMY_DATA[enemyLevel].name;
-          let allData = statsSnap.exists() ? statsSnap.data() : {};
+          let allData = statsSnap.exists() ? statsSnap.data() : { lastDefeatedBossLevel: -1 }; // Ensure progression field exists
           let bossData = allData[currentBossName] || { wins: 0, defeats: 0, drops: [] };
 
           if (result === 'win') {
@@ -434,23 +490,40 @@ function BattleScreen() {
                   currentDrops.push(droppedPart);
                   bossData.drops = currentDrops;
               }
+              
+              // NEW PROGRESSION LOGIC: Update lastDefeatedBossLevel only if this was the next boss
+              const currentLastDefeatedLevel = allData.lastDefeatedBossLevel !== undefined ? allData.lastDefeatedBossLevel : -1;
+              if (enemyLevel === currentLastDefeatedLevel + 1) {
+                  allData.lastDefeatedBossLevel = enemyLevel;
+                  // Immediately update local state/ref for the next battle decision
+                  setLastDefeatedBossLevel(enemyLevel); 
+              }
           } else {
               bossData.defeats = (bossData.defeats || 0) + 1;
           }
           bossData.lastEncounter = new Date().toISOString();
 
-          await setDoc(statsRef, { [currentBossName]: bossData }, { merge: true });
+          // Prepare data for setDoc (merge existing boss data with updated progression)
+          const updateData = {
+              ...allData, // Preserve other boss stats
+              [currentBossName]: bossData,
+              lastDefeatedBossLevel: allData.lastDefeatedBossLevel // Save the potentially new level
+          };
+
+          await setDoc(statsRef, updateData, { merge: true });
       } catch (e) {
           console.error("Error updating battle stats:", e);
       }
   };
 
   const calculateDamage = (damageRange) => {
+// ... (rest of calculateDamage remains the same)
     const { min, max } = damageRange;
     return Math.floor(Math.random() * (max - min + 1) + min);
   };
 
   const handleAction = (actionType, actionIndex) => {
+// ... (rest of handleAction remains the same)
     if (isAttacking || battleEnded) return;
     setIsAttacking(true);
 
@@ -526,6 +599,7 @@ function BattleScreen() {
   };
 
   const finishPlayerTurn = (damageDealt) => {
+// ... (rest of finishPlayerTurn remains the same)
       // Apply Damage to Enemy
       if (damageDealt > 0) {
           const newEnemyHP = Math.max(0, enemyHP - damageDealt);
@@ -622,6 +696,7 @@ function BattleScreen() {
   };
 
   const generateRewards = async () => {
+// ... (rest of generateRewards remains the same)
     const hpPercentage = (playerHP / playerMaxHP) * 100;
     let rank = 'C';
     if (hpPercentage >= 90) rank = 'S';
@@ -673,6 +748,7 @@ function BattleScreen() {
             }
             await setDoc(scrapRef, { coins: currentCoins + coinsCalculated }, { merge: true });
             
+            // This is where we update progression if the defeated boss was the next linear one
             await updateBattleStats('win', isDuplicate ? null : droppedPartName);
 
         } catch (error) {
@@ -697,6 +773,7 @@ function BattleScreen() {
   };
 
   const handleSurrender = () => {
+// ... (rest of handleSurrender remains the same)
       // If battle is already ended, the back button acts as a normal exit to menu
       if (battleEnded) {
           handleExitTransition();
@@ -727,23 +804,31 @@ function BattleScreen() {
     handleExitTransition();
   };
 
+  // UPDATED: handleNextBattle now uses the progression logic
   const handleNextBattle = () => {
       setBattleEnded(false);
       setWinner(null);
-      // Logic for next level index
-      const nextLevel = (enemyLevel + 1) % 3;
+      
+      // Determine the level for the next battle based on the *updated* progression state
+      const nextLevel = getNextBattleLevel(lastDefeatedBossLevelRef.current, ENEMY_DATA.length);
+      
       const randomBgIndex = Math.floor(Math.random() * BATTLE_ASSETS.backgrounds.length);
       setCurrentBg(BATTLE_ASSETS.backgrounds[randomBgIndex]);
+      
+      // Initialize with the determined next level
       initializeBattle(loadout, nextLevel);
   };
 
+  // UPDATED: handleRestart now restarts the current level
   const handleRestart = () => {
     setBattleEnded(false);
     setWinner(null);
+    // Restart the current enemy level for immediate re-challenge
     initializeBattle(loadout, enemyLevel); 
   };
 
   const getWeaponOffset = () => {
+// ... (rest of getWeaponOffset remains the same)
     const weapon = loadout.Weapon;
     const chassis = loadout.Chassis;
     if (!chassis || !weapon) return 0;
@@ -766,6 +851,7 @@ function BattleScreen() {
   };
 
   // UPDATED LOADING VIEW WITH COGWHEEL ANIMATION & CENTERED TEXT
+// ... (rest of loading view remains the same)
   if (isLoading || isExiting) {
     return (
       <ImageBackground 
@@ -802,6 +888,7 @@ function BattleScreen() {
   const playerAttackGif = BATTLE_ASSETS.playerAttacks[equippedWeapon] || BATTLE_ASSETS.playerAttacks.WeaponGeneralis;
 
   return (
+// ... (rest of return statement remains the same)
     <ImageBackground source={currentBg} style={styles.container} resizeMode="cover">
       <SafeAreaView style={styles.topOverlay}>
         <TouchableOpacity style={styles.surrenderButton} onPress={handleSurrender}>
@@ -959,8 +1046,11 @@ function BattleScreen() {
                             <TouchableOpacity style={styles.rematchButton} onPress={handleRestart}>
                                 <Text style={styles.rematchText}>REMATCH</Text>
                             </TouchableOpacity>
+                            {/* Next or Rechallenge depending on progression */}
                             <TouchableOpacity style={styles.okButton} onPress={handleNextBattle}>
-                                <Text style={styles.buttonText}>NEXT</Text>
+                                <Text style={styles.buttonText}>
+                                    {lastDefeatedBossLevelRef.current === ENEMY_DATA.length - 1 ? 'RE-CHALLENGE' : 'NEXT'}
+                                </Text>
                             </TouchableOpacity>
                         </>
                     ) : (
@@ -984,6 +1074,7 @@ function BattleScreen() {
         <View style={styles.skillRow}>
           {/* Attack 1 */}
           <TouchableOpacity 
+// ... (rest of attack buttons and styles remain the same)
             style={[
                 styles.skillButton, 
                 (battleEnded || isAttacking || playerEN < weaponStats.attacks[0].cost) ? styles.skillButtonDisabled : {}
@@ -1073,6 +1164,7 @@ function BattleScreen() {
 }
 
 const styles = StyleSheet.create({
+// ... (rest of styles remains the same)
   container: { 
       flex: 1 
   },
