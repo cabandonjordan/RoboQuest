@@ -576,13 +576,7 @@ function ResultScreen() {
               <Text style={styles.statusText}>Analyzing Main Object</Text>
               <Text style={styles.subStatusText}>Getting detailed information...</Text>
               
-              {/* Joshlee code wink - Show unlock status if applicable */}
-              {unlockResult?.success && (
-                <View style={styles.unlockBadge}>
-                  <Ionicons name="unlock-outline" size={16} color={colors.success} />
-                  <Text style={styles.unlockBadgeText}>New Part Unlocked!</Text>
-                </View>
-              )}
+              
             </View>
 
             <View style={styles.progressContainer}>
@@ -617,21 +611,7 @@ function ResultScreen() {
               </Text>
             </View>
 
-            {/* Joshlee code wink - Show unlock notification if part was unlocked */}
-            {unlockResult?.success && (
-              <View style={styles.unlockNotification}>
-                <View style={styles.unlockNotificationHeader}>
-                  <Ionicons name="trophy-outline" size={24} color="#FFD700" />
-                  <Text style={styles.unlockNotificationTitle}>Part Unlocked!</Text>
-                </View>
-                <Text style={styles.unlockNotificationText}>
-                  You've unlocked: <Text style={styles.unlockPartName}>{unlockResult.unlockedPart}</Text>
-                </Text>
-                <Text style={styles.unlockNotificationHint}>
-                  Return to Loadout to equip your new part!
-                </Text>
-              </View>
-            )}
+           
 
             {detectionResult.sceneContext && (
               <View style={styles.sceneContextCard}>
