@@ -10,11 +10,13 @@ import {
     Dimensions, 
     ImageBackground,
     Easing,
-    StatusBar
+    StatusBar,
+    Alert,
+    ActivityIndicator
 } from 'react-native'; 
 import { useNavigation, useIsFocused } from '@react-navigation/native';
-import { auth, db, doc, getDoc, onAuthStateChanged } from './database/firebase';
-import { useAudio } from './contexts/AudioContext';
+import { Ionicons } from '@expo/vector-icons';
+import { auth, db, doc, getDoc, onAuthStateChanged, updateDoc, setDoc, onSnapshot, writeBatch } from './database/firebase';
 
 // Color Used are in Hex and Rgba formats
 const Indent_Color = '#06DFDE';
@@ -28,21 +30,19 @@ const CIRCLE_BG_COLOR = 'rgba(255, 255, 255, 0.2)';
 const ICON_SIZE = 30; 
 const CONTAINER_SIZE = 45; 
 const HEADER_COLOR = '#2A2A2A';
-
+const SUCCESS_GREEN = '#00CC66';
+const GOLD_COIN = '#FFD700';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-// RESPONSIVE FUNCTIONS - ADDED FOR RESPONSIVENESS ONLY
+// RESPONSIVE FUNCTIONS
 const responsiveScale = (size) => {
-    // Base width for iPhone X/11/12/13
     const baseWidth = 375;
     const scaleFactor = SCREEN_WIDTH / baseWidth;
     
-    // For very small screens (iPhone SE)
     if (SCREEN_WIDTH < 350) {
         return Math.round(size * scaleFactor * 0.9);
     }
-    // For large screens (iPhone Plus/Pro Max, tablets)
     if (SCREEN_WIDTH > 414) {
         return Math.round(size * scaleFactor * 1.05);
     }
@@ -95,6 +95,8 @@ const ICONS = {
     journal: require('./assets/icons/journal.png'),       
     main_menubg: require('./assets/background/MainMenubgOff.png'), 
     main_menubg_on: require('./assets/background/MainMenubg.png'),
+    checkmark: require('./assets/icons/checkmark.png'),
+    coin: require('./assets/icons/coin.png'),
 };
 
 const ASSETS = {
@@ -121,6 +123,85 @@ const DEFAULT_LOADOUT = {
     Weapon: 'WeaponGeneralis'
 };
 
+// Quest Types
+const QUEST_TYPES = {
+    DEFEAT_BOSS: 'defeat_boss',
+    OBTAIN_PARTS: 'obtain_parts',
+    OPEN_LEGENDARY_CHEST: 'open_legendary_chest',
+    TAKE_PICTURE: 'take_picture',
+    ACQUIRE_PARTS: 'acquire_parts'
+};
+
+// Initial Quest Data
+const INITIAL_QUESTS = [
+    {
+        id: 'quest_1',
+        type: QUEST_TYPES.DEFEAT_BOSS,
+        title: "Defeat a Boss",
+        description: "Successfully defeat any boss in battle mode",
+        reward: 100,
+        rewardType: 'scrap_coins',
+        isCompleted: false,
+        isClaimed: false,
+        progress: 0,
+        target: 1,
+        createdAt: new Date().toISOString()
+    },
+    {
+        id: 'quest_2',
+        type: QUEST_TYPES.OBTAIN_PARTS,
+        title: "Obtain New Parts",
+        description: "Acquire 3 new robot parts",
+        reward: 50,
+        rewardType: 'scrap_coins',
+        isCompleted: false,
+        isClaimed: false,
+        progress: 0,
+        target: 3,
+        createdAt: new Date().toISOString()
+    },
+    {
+        id: 'quest_3',
+        type: QUEST_TYPES.OPEN_LEGENDARY_CHEST,
+        title: "Open Legendary Chest",
+        description: "Open a legendary chest in shop",
+        reward: 200,
+        rewardType: 'scrap_coins',
+        isCompleted: false,
+        isClaimed: false,
+        progress: 0,
+        target: 1,
+        createdAt: new Date().toISOString()
+    },
+    {
+        id: 'quest_4',
+        type: QUEST_TYPES.TAKE_PICTURE,
+        title: "Take a Picture",
+        description: "Use camera mode to take a picture",
+        reward: 30,
+        rewardType: 'scrap_coins',
+        isCompleted: false,
+        isClaimed: false,
+        progress: 0,
+        target: 1,
+        createdAt: new Date().toISOString()
+    },
+    {
+        id: 'quest_5',
+        type: QUEST_TYPES.ACQUIRE_PARTS,
+        title: "Acquire Specific Parts",
+        description: "Acquire 1 of each part type",
+        reward: 150,
+        rewardType: 'scrap_coins',
+        isCompleted: false,
+        isClaimed: false,
+        progress: 0,
+        target: 4,
+        createdAt: new Date().toISOString()
+    }
+];
+
+// SparkAnimation Component
 const SparkAnimation = ({ 
     isActive = false, 
     size = 30, 
@@ -128,7 +209,7 @@ const SparkAnimation = ({
     count = 6, 
     duration = 800,
     style = {},
-    position = 'center' // 'center', 'top', 'back', 'left', 'right'
+    position = 'center'
 }) => {
     const animValues = useRef([]);
     const scales = useRef([]);
@@ -210,34 +291,34 @@ const SparkAnimation = ({
 
     const getSparkPosition = (index) => {
         const angle = (index / count) * Math.PI * 2;
-        let radius = scaleSize(size) * 1.2; 
+        let radius = scaleSize(size) * 1.2;
         switch(position) {
             case 'top':
-                const topAngle = (index / count) * Math.PI; 
-                const topRadius = scaleSize(size) * 1.5; 
+                const topAngle = (index / count) * Math.PI;
+                const topRadius = scaleSize(size) * 1.5;
                 return {
                     left: topRadius * Math.cos(topAngle),
-                    top: -topRadius * 0.8, 
+                    top: -topRadius * 0.8,
                 };
             case 'back':
-                const backRadius = scaleSize(size) * 1.8; 
+                const backRadius = scaleSize(size) * 1.8;
                 return {
                     left: backRadius * Math.cos(angle),
-                    top: backRadius * Math.sin(angle) * 0.5, 
+                    top: backRadius * Math.sin(angle) * 0.5,
                 };
             case 'left':
-                const leftAngle = (index / count) * Math.PI * 1.5; 
+                const leftAngle = (index / count) * Math.PI * 1.5;
                 return {
-                    left: -scaleSize(size) * 1.5, 
-                    top: scaleSize(size) * Math.sin(leftAngle) * 0.8, 
+                    left: -scaleSize(size) * 1.5,
+                    top: scaleSize(size) * Math.sin(leftAngle) * 0.8,
                 };
             case 'right':
-                const rightAngle = (index / count) * Math.PI * 1.5; 
+                const rightAngle = (index / count) * Math.PI * 1.5;
                 return {
-                    left: scaleSize(size) * 1.5, 
-                    top: scaleSize(size) * Math.sin(rightAngle) * 0.8, 
+                    left: scaleSize(size) * 1.5,
+                    top: scaleSize(size) * Math.sin(rightAngle) * 0.8,
                 };
-            default: 
+            default:
                 return {
                     left: radius * Math.cos(angle),
                     top: radius * Math.sin(angle),
@@ -279,9 +360,9 @@ const SparkAnimation = ({
                         {
                             backgroundColor: color,
                             opacity: opacity,
-                            width: scaleSize(size / 4), 
-                            height: scaleSize(size / 4), 
-                            borderRadius: scaleSize(size / 8), 
+                            width: scaleSize(size / 4),
+                            height: scaleSize(size / 4),
+                            borderRadius: scaleSize(size / 8),
                             transform: [
                                 { translateX },
                                 { translateY },
@@ -295,7 +376,7 @@ const SparkAnimation = ({
         });
     };
 
-    const responsiveSize = scaleSize(size); 
+    const responsiveSize = scaleSize(size);
     
     return (
         <View style={[styles.sparkContainer, { 
@@ -323,17 +404,10 @@ const SparkAnimation = ({
 
 // Action Panel Button Component
 const ActionPanelButton = ({ iconSource, label, onPress }) => {
-    const { playButtonSound } = useAudio();
-    
-    const handlePress = () => {
-        playButtonSound();
-        if (onPress) onPress();
-    };
-    
     return (
         <TouchableOpacity 
             style={styles.actionButton} 
-            onPress={handlePress}
+            onPress={onPress}
         >
             <Image 
                 source={iconSource}
@@ -347,18 +421,13 @@ const ActionPanelButton = ({ iconSource, label, onPress }) => {
 
 // Camera Screen Button Component
 const CameraScreenButton = ({ navigation }) => {
-    const { playButtonSound } = useAudio();
-    
-    const handlePress = () => {
-        playButtonSound();
-        navigation.navigate('Camera');
-    };
-    
     return (
         <View style={styles.cameraButtonOuterContainer}>
             <TouchableOpacity 
                 style={styles.cameraButton} 
-                onPress={handlePress}
+                onPress={() => {
+                    navigation.navigate('Camera');
+                }}
             >
                 <View style={styles.cameraAccentTopRight} />
                 <View style={styles.cameraAccentBottomLeft} />
@@ -376,11 +445,119 @@ const CameraScreenButton = ({ navigation }) => {
     );
 };
 
+// Debug function to log quest state
+const logQuestState = (quest, action) => {
+    console.log(`Quest ${action}:`, {
+        id: quest.id,
+        title: quest.title,
+        isCompleted: quest.isCompleted,
+        isClaimed: quest.isClaimed,
+        progress: quest.progress,
+        target: quest.target
+    });
+};
+
+// Quest Item Component
+const QuestItem = ({ quest, onClaim, userScrapCoins, isClaiming }) => {
+    const isCompleted = quest.isCompleted && !quest.isClaimed;
+    const isDisabled = quest.isClaimed || isClaiming || !isCompleted;
+    const progressPercentage = (quest.progress / quest.target) * 100;
+    const progressText = quest.type === QUEST_TYPES.DEFEAT_BOSS 
+        ? "Defeat a boss in battle mode"
+        : quest.description;
+    
+    const handleClaimPress = () => {
+        if (!isDisabled) {
+            onClaim(quest);
+        } else {
+            // Provide feedback for disabled button
+            if (quest.isClaimed) {
+                Alert.alert("Already Claimed", "You've already claimed the reward for this quest.");
+            } else if (!quest.isCompleted) {
+                Alert.alert("Not Completed", "Complete the quest requirements first.");
+            }
+        }
+    };
+    
+    return (
+        <View style={questListStyles.questItem}>
+            <View style={questListStyles.questHeader}>
+                <Text style={questListStyles.questTitle}>{quest.title}</Text>
+                <View style={questListStyles.rewardContainer}>
+                    <Image source={ICONS.coin} style={questListStyles.coinIcon} />
+                    <Text style={questListStyles.rewardText}>+{quest.reward}</Text>
+                </View>
+            </View>
+            
+            <Text style={questListStyles.questDescription}>{progressText}</Text>
+            
+            <View style={questListStyles.progressContainer}>
+                <View style={questListStyles.progressBar}>
+                    <View 
+                        style={[
+                            questListStyles.progressFill,
+                            { width: `${Math.min(progressPercentage, 100)}%` }
+                        ]} 
+                    />
+                </View>
+                <Text style={questListStyles.progressText}>
+                    {quest.progress}/{quest.target}
+                </Text>
+            </View>
+            
+            {isCompleted ? (
+                <TouchableOpacity 
+                    style={[
+                        questListStyles.claimButton,
+                        isDisabled && questListStyles.claimButtonDisabled
+                    ]}
+                    onPress={handleClaimPress}
+                    activeOpacity={isDisabled ? 1 : 0.8}
+                    disabled={isDisabled}
+                >
+                    {isClaiming ? (
+                        <ActivityIndicator color="#FFFFFF" size="small" />
+                    ) : quest.isClaimed ? (
+                        <>
+                            <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" />
+                            <Text style={questListStyles.claimText}>CLAIMED</Text>
+                        </>
+                    ) : (
+                        <>
+                            <Image source={ICONS.checkmark} style={questListStyles.claimIcon} />
+                            <Text style={questListStyles.claimText}>CLAIM {quest.reward} COINS</Text>
+                        </>
+                    )}
+                </TouchableOpacity>
+            ) : quest.isClaimed ? (
+                <View style={questListStyles.claimedButton}>
+                    <Ionicons name="checkmark-circle" size={16} color={SUCCESS_GREEN} />
+                    <Text style={questListStyles.claimedText}>REWARD CLAIMED</Text>
+                </View>
+            ) : (
+                <View style={questListStyles.incompleteButton}>
+                    <Text style={questListStyles.incompleteText}>IN PROGRESS</Text>
+                </View>
+            )}
+        </View>
+    );
+};
+
 // Quest List Component
-const QuestList = ({ show, slideAnim, questIconLayout }) => {
+const QuestList = ({ 
+    show, 
+    slideAnim, 
+    questIconLayout, 
+    quests, 
+    onClaimQuest,
+    userScrapCoins,
+    onClose,
+    onRefresh,
+    claimingQuestId
+}) => {
     if (!show || !questIconLayout) return null; 
 
-    const topPosition = questIconLayout.y + questIconLayout.height + responsiveSpacing(5); 
+    const topPosition = questIconLayout.y + questIconLayout.height + responsiveSpacing(5);
     const questListWidth = SCREEN_WIDTH * 0.90;
     const questListOffset = (SCREEN_WIDTH / 2) - (questListWidth / 2);
     
@@ -388,41 +565,78 @@ const QuestList = ({ show, slideAnim, questIconLayout }) => {
         transform: [{
             translateX: slideAnim.interpolate({
                 inputRange: [0, 1],
-                outputRange: [-questListWidth, questListOffset - responsiveSpacing(20)], 
+                outputRange: [-questListWidth, questListOffset - responsiveSpacing(20)],
             }),
         }],
         top: topPosition,
-        left: 0, 
+        left: 0,
     };
 
-    const QUESTS = ["• Defeat Stage 1", "• Defeat Stage 2", "• Defeat Stage 3"];
+    // Get only active quests (not claimed, max 3)
+    const activeQuests = quests.filter(q => !q.isClaimed).slice(0, 3);
+    const completedQuests = quests.filter(q => q.isCompleted && !q.isClaimed);
 
     return (
         <Animated.View style={[questListStyles.container, animatedStyle, { width: questListWidth }]}>
-            {QUESTS.map((quest, index) => (
-                <View key={index} style={questListStyles.item}>
-                    <Text style={questListStyles.text}>{quest}</Text> 
+            <TouchableOpacity 
+                style={questListStyles.closeButton}
+                onPress={onClose}
+            >
+                <Text style={questListStyles.closeButtonText}>✕</Text>
+            </TouchableOpacity>
+            
+            <View style={questListStyles.header}>
+                <TouchableOpacity 
+                    style={questListStyles.refreshButton}
+                    onPress={onRefresh}
+                >
+                    <Text style={questListStyles.refreshButtonText}>⟳</Text>
+                </TouchableOpacity>
+                <Text style={questListStyles.headerTitle}>DAILY QUESTS</Text>
+                <View style={questListStyles.coinDisplay}>
+                    <Image source={ICONS.coin} style={questListStyles.headerCoinIcon} />
+                    <Text style={questListStyles.coinAmount}>{userScrapCoins}</Text>
                 </View>
-            ))}
+            </View>
+            
+            {completedQuests.length > 0 && (
+                <View style={questListStyles.notificationBanner}>
+                    <Text style={questListStyles.notificationText}>
+                        {completedQuests.length} quest{completedQuests.length > 1 ? 's' : ''} ready to claim!
+                    </Text>
+                </View>
+            )}
+            
+            {activeQuests.length > 0 ? (
+                activeQuests.map((quest) => (
+                    <QuestItem 
+                        key={quest.id}
+                        quest={quest}
+                        onClaim={onClaimQuest}
+                        userScrapCoins={userScrapCoins}
+                        isClaiming={claimingQuestId === quest.id}
+                    />
+                ))
+            ) : (
+                <View style={questListStyles.noQuestsContainer}>
+                    <Text style={questListStyles.noQuestsText}>All quests completed!</Text>
+                    <Text style={questListStyles.noQuestsSubText}>New quests available tomorrow</Text>
+                </View>
+            )}
+            
+            <Text style={questListStyles.refreshText}>Refreshes daily at midnight</Text>
         </Animated.View>
     );
 };
 
-const SimpleTopIconButton = ({ iconSource, onPress, isQuest = false, isActive = false, refProp = null }) => {
-    const { playButtonSound } = useAudio();
-    
-    const handlePress = () => {
-        playButtonSound();
-        if (onPress) onPress();
-    };
-    
+const SimpleTopIconButton = ({ iconSource, onPress, isQuest = false, isActive = false, refProp = null, notificationCount = 0 }) => {
     return (
         <TouchableOpacity 
             style={[
                 styles.topIconButton,
                 isActive && styles.topIconButtonActive
             ]} 
-            onPress={handlePress}
+            onPress={onPress}
             ref={refProp}
             activeOpacity={0.7}
         >
@@ -434,6 +648,11 @@ const SimpleTopIconButton = ({ iconSource, onPress, isQuest = false, isActive = 
                 ]} 
                 resizeMode="contain"
             />
+            {notificationCount > 0 && (
+                <View style={styles.notificationBadge}>
+                    <Text style={styles.notificationText}>{notificationCount}</Text>
+                </View>
+            )}
         </TouchableOpacity>
     );
 };
@@ -450,21 +669,21 @@ const RobotPreview = ({ loadout }) => {
         if (!chassis || !weapon) return 0;
 
         if (chassis === "ChassisInnovare") {
-            if (weapon === "WeaponCreativia") return responsiveSpacing(13); 
-            if (weapon === "WeaponGeneralis") return responsiveSpacing(8); 
+            if (weapon === "WeaponCreativia") return responsiveSpacing(13);
+            if (weapon === "WeaponGeneralis") return responsiveSpacing(8);
             if (weapon === "WeaponInnovare") return 0;
         }
 
         if (chassis === "ChassisGeneralis") {
-            if (weapon === "WeaponCreativia") return responsiveSpacing(6); 
+            if (weapon === "WeaponCreativia") return responsiveSpacing(6);
             if (weapon === "WeaponGeneralis") return 0;
-            if (weapon === "WeaponInnovare") return responsiveSpacing(-6); 
+            if (weapon === "WeaponInnovare") return responsiveSpacing(-6);
         }
     
         if (chassis === "ChassisCreativia") {
             if (weapon === "WeaponCreativia") return 0;
-            if (weapon === "WeaponGeneralis") return responsiveSpacing(-5); 
-            if (weapon === "WeaponInnovare") return responsiveSpacing(-11); 
+            if (weapon === "WeaponGeneralis") return responsiveSpacing(-5);
+            if (weapon === "WeaponInnovare") return responsiveSpacing(-11);
         }
 
         return 0;
@@ -493,10 +712,10 @@ const RobotPreview = ({ loadout }) => {
                 activeOpacity={1}
             >
                 <View style={styles.robotStage}>
-                    <Text style={{ color: LIGHT_BLUE, fontSize: responsiveFont(16), textAlign: 'center' }}> // RESPONSIVE FONT
+                    <Text style={{ color: LIGHT_BLUE, fontSize: responsiveFont(16), textAlign: 'center' }}>
                         No robot configured
                     </Text>
-                    <Text style={{ color: LIGHT_GREY, fontSize: responsiveFont(12), textAlign: 'center', marginTop: responsiveSpacing(10) }}> // RESPONSIVE FONT & SPACING
+                    <Text style={{ color: LIGHT_GREY, fontSize: responsiveFont(12), textAlign: 'center', marginTop: responsiveSpacing(10) }}>
                         Go to Loadout to customize your robot
                     </Text>
                 </View>
@@ -504,7 +723,6 @@ const RobotPreview = ({ loadout }) => {
         );
     }
 
-    // RESPONSIVE ROBOT SIZE
     const robotWidth = SCREEN_WIDTH * (SCREEN_WIDTH < 350 ? 0.75 : SCREEN_WIDTH > 414 ? 0.85 : 0.8);
     const robotHeight = robotWidth;
     
@@ -517,37 +735,37 @@ const RobotPreview = ({ loadout }) => {
                 return {
                     position: 'absolute',
                     top: -robotHeight * 0.15,
-                    left: robotCenterX - responsiveSpacing(45), 
+                    left: robotCenterX - responsiveSpacing(45),
                 };
             case 'back':
                 return {
                     position: 'absolute',
-                    top: robotCenterY - responsiveSpacing(30), 
+                    top: robotCenterY - responsiveSpacing(30),
                     left: robotWidth * 0.15,
                 };
             case 'center':
                 return {
                     position: 'absolute',
-                    top: robotCenterY - responsiveSpacing(45), 
-                    left: robotCenterX - responsiveSpacing(45), 
+                    top: robotCenterY - responsiveSpacing(45),
+                    left: robotCenterX - responsiveSpacing(45),
                 };
             case 'left':
                 return {
                     position: 'absolute',
-                    top: robotCenterY - responsiveSpacing(45), 
-                    left: -responsiveSpacing(45), 
+                    top: robotCenterY - responsiveSpacing(45),
+                    left: -responsiveSpacing(45),
                 };
             case 'right':
                 return {
                     position: 'absolute',
-                    top: robotCenterY - responsiveSpacing(45), 
-                    left: robotWidth - responsiveSpacing(45), 
+                    top: robotCenterY - responsiveSpacing(45),
+                    left: robotWidth - responsiveSpacing(45),
                 };
             default:
                 return {
                     position: 'absolute',
-                    top: robotCenterY - responsiveSpacing(45), 
-                    left: robotCenterX - responsiveSpacing(45), 
+                    top: robotCenterY - responsiveSpacing(45),
+                    left: robotCenterX - responsiveSpacing(45),
                 };
         }
     };
@@ -625,7 +843,7 @@ const BlinkingLightAnimation = ({ isVisible }) => {
             const doubleBlinkSequence = () => {
                 Animated.timing(fadeAnim, {
                     toValue: 1,
-                    duration: 200, 
+                    duration: 200,
                     useNativeDriver: true,
                 }).start(() => {
                     setCurrentBg(ICONS.main_menubg_on);
@@ -633,14 +851,14 @@ const BlinkingLightAnimation = ({ isVisible }) => {
                     setTimeout(() => {
                         Animated.timing(fadeAnim, {
                             toValue: 0,
-                            duration: 100, 
+                            duration: 100,
                             useNativeDriver: true,
                         }).start(() => {
                             setCurrentBg(ICONS.main_menubg);
                             setTimeout(() => {
                                 Animated.timing(fadeAnim, {
                                     toValue: 1,
-                                    duration: 200, 
+                                    duration: 200,
                                     useNativeDriver: true,
                                 }).start(() => {
                                     setCurrentBg(ICONS.main_menubg_on);
@@ -648,16 +866,16 @@ const BlinkingLightAnimation = ({ isVisible }) => {
                                     setTimeout(() => {
                                         Animated.timing(fadeAnim, {
                                             toValue: 0,
-                                            duration: 100,  
+                                            duration: 100,
                                             useNativeDriver: true,
                                         }).start(() => {
                                             setCurrentBg(ICONS.main_menubg);
                                         });
-                                    }, 300);    
+                                    }, 300);
                                 });
-                            }, 150); 
+                            }, 150);
                         });
-                    }, 300);    
+                    }, 300);
                 });
             };
 
@@ -697,7 +915,7 @@ const BlinkingLightAnimation = ({ isVisible }) => {
 };
 
 // Gray Header Component
-const GrayHeader = ({ onQuestPress, onShopPress, onSettingsPress, showQuestList, questIconRef }) => {
+const GrayHeader = ({ onQuestPress, onShopPress, onSettingsPress, showQuestList, questIconRef, notificationCount = 0 }) => {
     return (
         <View style={styles.headerContainer}>
             <View style={styles.headerIconsContainer}>
@@ -708,6 +926,7 @@ const GrayHeader = ({ onQuestPress, onShopPress, onSettingsPress, showQuestList,
                         isQuest={true}
                         isActive={showQuestList}
                         refProp={questIconRef}
+                        notificationCount={notificationCount}
                     />
                 </View>
                 <View style={styles.headerRight}>
@@ -726,6 +945,35 @@ const GrayHeader = ({ onQuestPress, onShopPress, onSettingsPress, showQuestList,
     );
 };
 
+// Helper function to calculate total boss wins
+const calculateTotalBossWins = (bossData) => {
+    if (!bossData) return 0;
+    
+    let totalWins = 0;
+    Object.values(bossData).forEach((bossStats) => {
+        if (bossStats && typeof bossStats === 'object') {
+            totalWins += bossStats.wins || 0;
+        }
+    });
+    return totalWins;
+};
+
+// Helper function to generate boss wins signature
+const generateBossWinsSignature = (bossData) => {
+    if (!bossData) return '';
+    
+    const winsArray = [];
+    Object.entries(bossData).forEach(([bossName, bossStats]) => {
+        if (bossStats && typeof bossStats === 'object') {
+            winsArray.push(`${bossName}:${bossStats.wins || 0}`);
+        }
+    });
+    
+    // Sort to ensure consistent signature
+    winsArray.sort();
+    return winsArray.join('|');
+};
+
 // Main Menu Screen Component
 function MainMenuScreen() {
     const navigation = useNavigation();
@@ -733,9 +981,338 @@ function MainMenuScreen() {
     const [showQuestList, setShowQuestList] = useState(false);
     const [currentLoadout, setCurrentLoadout] = useState(DEFAULT_LOADOUT);
     const [currentUser, setCurrentUser] = useState(null);
-    const slideAnim = useRef(new Animated.Value(0)).current; 
+    const [userScrapCoins, setUserScrapCoins] = useState(0);
+    const [quests, setQuests] = useState(INITIAL_QUESTS);
+    const [isLoading, setIsLoading] = useState(true);
+    const slideAnim = useRef(new Animated.Value(0)).current;
     const questIconRef = useRef(null);
     const [questIconLayout, setQuestIconLayout] = useState(null);
+    const [claimingQuestId, setClaimingQuestId] = useState(null);
+    
+    // Track boss defeat counts
+    const [totalBossWins, setTotalBossWins] = useState(0);
+    const [bossWinsSignature, setBossWinsSignature] = useState('');
+
+    // Function to check and update photo quest from Roboquest-Journal-Entry
+    const checkAndUpdatePhotoQuest = async (userId, currentQuests) => {
+        try {
+            // Load journal entry data
+            const journalRef = doc(db, 'Roboquest-Journal-Entry', userId);
+            const journalSnap = await getDoc(journalRef);
+            
+            if (!journalSnap.exists()) {
+                return currentQuests;
+            }
+            
+            const journalData = journalSnap.data();
+            const entries = journalData.entries || [];
+            const hasAnyPhotos = entries.length > 0;
+            
+            // Update quests based on photo status
+            const updatedQuests = currentQuests.map(quest => {
+                if (quest.type === QUEST_TYPES.TAKE_PICTURE && !quest.isCompleted && !quest.isClaimed) {
+                    if (hasAnyPhotos) {
+                        console.log("Photos detected in journal, updating take picture quest");
+                        return {
+                            ...quest,
+                            progress: 1,
+                            isCompleted: true,
+                            lastUpdated: new Date().toISOString()
+                        };
+                    }
+                }
+                return quest;
+            });
+            
+            return updatedQuests;
+            
+        } catch (error) {
+            console.log("Error checking photo quest:", error);
+            return currentQuests;
+        }
+    };
+
+    // Function to check and update boss quests - FIXED VERSION
+    const checkAndUpdateBossQuests = async (userId, currentQuests, previousSignature = '') => {
+        try {
+            const user = currentUser || auth.currentUser;
+            if (!user) return { 
+                updatedQuests: currentQuests, 
+                bossData: null, 
+                newSignature: previousSignature 
+            };
+            
+            const userName = user.displayName || user.email?.split('@')[0] || 'Player';
+            const docId = `${userName}-Roboquest-Boss`;
+            const bossRef = doc(db, 'Roboquest-Boss', docId);
+            const bossSnap = await getDoc(bossRef);
+            
+            if (!bossSnap.exists()) {
+                console.log("No boss data found");
+                return { 
+                    updatedQuests: currentQuests, 
+                    bossData: null, 
+                    newSignature: '' 
+                };
+            }
+            
+            const currentBossData = bossSnap.data();
+            const currentSignature = generateBossWinsSignature(currentBossData);
+            const currentTotalWins = calculateTotalBossWins(currentBossData);
+            
+            console.log("Current boss signature:", currentSignature);
+            console.log("Previous boss signature:", previousSignature);
+            console.log("Current total wins:", currentTotalWins);
+            
+            // Update quests if boss wins changed (increased)
+            const updatedQuests = currentQuests.map(quest => {
+                if (quest.type === QUEST_TYPES.DEFEAT_BOSS && !quest.isClaimed) {
+                    // Check if signature changed (boss wins increased)
+                    const signatureChanged = currentSignature !== previousSignature;
+                    const hasAnyWins = currentTotalWins > 0;
+                    
+                    if (signatureChanged && hasAnyWins && !quest.isCompleted) {
+                        console.log("Boss wins increased, marking quest as complete");
+                        return {
+                            ...quest,
+                            progress: 1,
+                            isCompleted: true,
+                            lastUpdated: new Date().toISOString()
+                        };
+                    }
+                }
+                return quest;
+            });
+            
+            return { 
+                updatedQuests, 
+                bossData: currentBossData, 
+                newSignature: currentSignature 
+            };
+            
+        } catch (error) {
+            console.log("Error checking boss quests:", error);
+            return { 
+                updatedQuests: currentQuests, 
+                bossData: null, 
+                newSignature: previousSignature 
+            };
+        }
+    };
+
+    // Load user data including scrap coins and quests
+    const loadUserData = async (user) => {
+        try {
+            const userId = user.uid;
+            
+            // Load scrap coins
+            const scrapRef = doc(db, 'Roboquest-Scraps', userId);
+            const scrapSnap = await getDoc(scrapRef);
+            if (scrapSnap.exists()) {
+                const scrapData = scrapSnap.data();
+                setUserScrapCoins(scrapData.coins || 0);
+            } else {
+                await setDoc(scrapRef, { coins: 0 });
+                setUserScrapCoins(0);
+            }
+
+            // Load quests
+            const questsRef = doc(db, 'Roboquest-Quests', userId);
+            const questsSnap = await getDoc(questsRef);
+            
+            if (questsSnap.exists()) {
+                const questsData = questsSnap.data();
+                let loadedQuests = questsData.quests || INITIAL_QUESTS;
+                
+                // Check boss defeat status
+                const { 
+                    updatedQuests: bossUpdatedQuests, 
+                    bossData, 
+                    newSignature 
+                } = await checkAndUpdateBossQuests(userId, loadedQuests, bossWinsSignature);
+                
+                // Check journal for take picture quest
+                const photoUpdatedQuests = await checkAndUpdatePhotoQuest(userId, bossUpdatedQuests);
+                
+                // Update quests in Firestore if they changed
+                if (JSON.stringify(photoUpdatedQuests) !== JSON.stringify(questsData.quests)) {
+                    await updateDoc(questsRef, {
+                        quests: photoUpdatedQuests,
+                        lastUpdated: new Date().toISOString()
+                    });
+                }
+                
+                setQuests(photoUpdatedQuests);
+                if (bossData) {
+                    setTotalBossWins(calculateTotalBossWins(bossData));
+                }
+                setBossWinsSignature(newSignature);
+            } else {
+                // Initialize quests for new user
+                let initialQuests = INITIAL_QUESTS;
+                
+                // Check boss defeat status
+                const { 
+                    updatedQuests: bossUpdatedQuests, 
+                    bossData, 
+                    newSignature 
+                } = await checkAndUpdateBossQuests(userId, initialQuests, '');
+                
+                // Check journal for take picture quest
+                const photoUpdatedQuests = await checkAndUpdatePhotoQuest(userId, bossUpdatedQuests);
+                
+                await setDoc(questsRef, { 
+                    quests: photoUpdatedQuests,
+                    lastUpdated: new Date().toISOString()
+                });
+                
+                setQuests(photoUpdatedQuests);
+                if (bossData) {
+                    setTotalBossWins(calculateTotalBossWins(bossData));
+                }
+                setBossWinsSignature(newSignature);
+            }
+
+        } catch (error) {
+            console.log("Error loading user data:", error);
+            setQuests(INITIAL_QUESTS);
+        }
+    };
+
+    // Update quest progress
+    const updateQuestProgress = async (questType, increment = 1) => {
+        if (!currentUser) return false;
+        
+        try {
+            const userId = currentUser.uid;
+            const questsRef = doc(db, 'Roboquest-Quests', userId);
+            const questsSnap = await getDoc(questsRef);
+            
+            if (questsSnap.exists()) {
+                const questsData = questsSnap.data();
+                const updatedQuests = questsData.quests.map(quest => {
+                    if (quest.type === questType && !quest.isClaimed) {
+                        // For boss quests, skip - they're handled by checkAndUpdateBossQuests
+                        if (quest.type === QUEST_TYPES.DEFEAT_BOSS) {
+                            return quest;
+                        }
+                        
+                        const newProgress = Math.min(quest.progress + increment, quest.target);
+                        const isNowCompleted = newProgress >= quest.target;
+                        
+                        return {
+                            ...quest,
+                            progress: newProgress,
+                            isCompleted: isNowCompleted,
+                            lastUpdated: new Date().toISOString()
+                        };
+                    }
+                    return quest;
+                });
+                
+                await updateDoc(questsRef, {
+                    quests: updatedQuests,
+                    lastUpdated: new Date().toISOString()
+                });
+                
+                setQuests(updatedQuests);
+                return true;
+            }
+        } catch (error) {
+            console.log("Error updating quest progress:", error);
+        }
+        return false;
+    };
+
+    // Claim quest reward
+    const claimQuestReward = async (quest) => {
+        logQuestState(quest, "Claim Attempt");
+        
+        // Prevent multiple clicks on same quest
+        if (claimingQuestId === quest.id) {
+            console.log("Already claiming this quest:", quest.id);
+            return;
+        }
+        
+        // Double-check if quest is already claimed or not completed
+        if (!currentUser || !quest.isCompleted || quest.isClaimed) {
+            console.log("Cannot claim quest:", {
+                hasUser: !!currentUser,
+                isCompleted: quest.isCompleted,
+                isClaimed: quest.isClaimed,
+                questId: quest.id
+            });
+            Alert.alert("Cannot Claim", "This quest has already been claimed or is not yet completed.");
+            return;
+        }
+        
+        setClaimingQuestId(quest.id);
+        
+        try {
+            const userId = currentUser.uid;
+            
+            // Use a batch to perform atomic operations
+            const batch = writeBatch(db);
+            
+            // 1. Get current scrap coins
+            const scrapRef = doc(db, 'Roboquest-Scraps', userId);
+            const scrapSnap = await getDoc(scrapRef);
+            const currentCoins = scrapSnap.exists() ? (scrapSnap.data().coins || 0) : 0;
+            const newCoins = currentCoins + quest.reward;
+            
+            // 2. Update scrap coins
+            batch.update(scrapRef, { coins: newCoins });
+            
+            // 3. Get current quests and mark this one as claimed
+            const questsRef = doc(db, 'Roboquest-Quests', userId);
+            const questsSnap = await getDoc(questsRef);
+            
+            if (questsSnap.exists()) {
+                const questsData = questsSnap.data();
+                const updatedQuests = questsData.quests.map(q => {
+                    if (q.id === quest.id) {
+                        return {
+                            ...q,
+                            isClaimed: true,
+                            claimedAt: new Date().toISOString(),
+                            claimedUserId: userId
+                        };
+                    }
+                    return q;
+                });
+                
+                // 4. Update quests
+                batch.update(questsRef, { 
+                    quests: updatedQuests,
+                    lastUpdated: new Date().toISOString()
+                });
+                
+                // 5. Commit the batch
+                await batch.commit();
+                
+                // 6. Update local state
+                setQuests(updatedQuests);
+                setUserScrapCoins(newCoins);
+                
+                // Reset claiming state
+                setClaimingQuestId(null);
+                
+                // 7. Show success message
+                Alert.alert(
+                    "🎉 Reward Claimed!",
+                    `You received ${quest.reward} scrap coins!\n\nNew balance: ${newCoins} coins`,
+                    [{ text: "Awesome!" }]
+                );
+            } else {
+                throw new Error("Quests document not found");
+            }
+            
+        } catch (error) {
+            console.log("Error claiming quest reward:", error);
+            Alert.alert("Error", "Failed to claim reward. Please try again.");
+            setClaimingQuestId(null);
+        }
+    };
 
     const loadCurrentLoadout = async (user) => {
         try {
@@ -776,12 +1353,203 @@ function MainMenuScreen() {
         }
     };
 
+    // Real-time listener for boss updates - ONLY updates when boss wins increase
+    useEffect(() => {
+        if (!currentUser) return;
+        
+        const userName = currentUser.displayName || currentUser.email?.split('@')[0] || 'Player';
+        const docId = `${userName}-Roboquest-Boss`;
+        
+        // Listen for boss data updates
+        const bossRef = doc(db, 'Roboquest-Boss', docId);
+        const unsubscribe = onSnapshot(bossRef, async (docSnap) => {
+            if (docSnap.exists()) {
+                const currentBossData = docSnap.data();
+                const currentSignature = generateBossWinsSignature(currentBossData);
+                const currentTotalWins = calculateTotalBossWins(currentBossData);
+                
+                console.log("=== Real-time Boss Update ===");
+                console.log("Current signature:", currentSignature);
+                console.log("Previous signature:", bossWinsSignature);
+                console.log("Current total wins:", currentTotalWins);
+                console.log("Previous total wins:", totalBossWins);
+                
+                // Only proceed if signature changed (boss wins changed)
+                if (currentSignature !== bossWinsSignature) {
+                    const winsIncreased = currentTotalWins > totalBossWins;
+                    
+                    console.log("Wins increased?", winsIncreased);
+                    
+                    if (winsIncreased) {
+                        console.log("BOSS WINS INCREASED! Updating quest...");
+                        
+                        // Update quests locally
+                        setQuests(prevQuests => {
+                            const updatedQuests = prevQuests.map(quest => {
+                                if (quest.type === QUEST_TYPES.DEFEAT_BOSS && !quest.isCompleted && !quest.isClaimed) {
+                                    console.log("Marking boss quest as complete");
+                                    return {
+                                        ...quest,
+                                        progress: 1,
+                                        isCompleted: true,
+                                        lastUpdated: new Date().toISOString()
+                                    };
+                                }
+                                return quest;
+                            });
+                            
+                            // Update in Firestore if quests changed
+                            if (JSON.stringify(updatedQuests) !== JSON.stringify(prevQuests)) {
+                                const questsRef = doc(db, 'Roboquest-Quests', currentUser.uid);
+                                updateDoc(questsRef, {
+                                    quests: updatedQuests,
+                                    lastUpdated: new Date().toISOString()
+                                }).catch(error => {
+                                    console.log("Error updating quests in Firestore:", error);
+                                });
+                                
+                                // Show notification
+                                setTimeout(() => {
+                                    Alert.alert(
+                                        "🏆 Boss Defeated!",
+                                        "You defeated a boss! Check your quests to claim your reward.",
+                                        [{ text: "OK" }]
+                                    );
+                                }, 500);
+                            }
+                            
+                            return updatedQuests;
+                        });
+                    }
+                    
+                    // Update state regardless of increase (for next comparison)
+                    setTotalBossWins(currentTotalWins);
+                    setBossWinsSignature(currentSignature);
+                }
+            } else {
+                console.log("No boss document exists yet");
+                setTotalBossWins(0);
+                setBossWinsSignature('');
+            }
+        });
+        
+        return () => unsubscribe();
+    }, [currentUser, bossWinsSignature, totalBossWins]);
+
+    // Add real-time listener for journal updates (photos)
+    useEffect(() => {
+        if (!currentUser) return;
+        
+        // Listen for journal updates
+        const journalRef = doc(db, 'Roboquest-Journal-Entry', currentUser.uid);
+        const unsubscribe = onSnapshot(journalRef, (docSnap) => {
+            if (docSnap.exists()) {
+                const journalData = docSnap.data();
+                const entries = journalData.entries || [];
+                const hasAnyEntries = entries.length > 0;
+                
+                if (hasAnyEntries) {
+                    // Update quests locally
+                    setQuests(prevQuests => {
+                        const updatedQuests = prevQuests.map(quest => {
+                            if (quest.type === QUEST_TYPES.TAKE_PICTURE && !quest.isCompleted && !quest.isClaimed) {
+                                console.log("Entries detected in journal, updating take picture quest");
+                                return {
+                                    ...quest,
+                                    progress: 1,
+                                    isCompleted: true,
+                                    lastUpdated: new Date().toISOString()
+                                };
+                            }
+                            return quest;
+                        });
+                        
+                        // Update in Firestore if quests changed
+                        if (JSON.stringify(updatedQuests) !== JSON.stringify(prevQuests)) {
+                            const questsRef = doc(db, 'Roboquest-Quests', currentUser.uid);
+                            updateDoc(questsRef, {
+                                quests: updatedQuests,
+                                lastUpdated: new Date().toISOString()
+                            }).catch(error => {
+                                console.log("Error updating quests in Firestore:", error);
+                            });
+                        }
+                        
+                        return updatedQuests;
+                    });
+                }
+            }
+        });
+        
+        return () => unsubscribe();
+    }, [currentUser]);
+
+    // Manual refresh function for quests
+    const refreshQuests = async () => {
+        if (currentUser) {
+            setIsLoading(true);
+            await loadUserData(currentUser);
+            setIsLoading(false);
+            
+            // Check if any quests are now completable
+            const completableQuests = quests.filter(q => 
+                q.isCompleted && !q.isClaimed
+            ).length;
+            
+            if (completableQuests > 0) {
+                Alert.alert(
+                    "Quests Updated", 
+                    `${completableQuests} quest${completableQuests > 1 ? 's' : ''} ready to claim!`
+                );
+            } else {
+                Alert.alert("Quests Refreshed", "Quest status has been updated.");
+            }
+        }
+    };
+
+    // Debug function to check boss data
+    const debugBossData = async () => {
+        if (!currentUser) return;
+        
+        try {
+            const userName = currentUser.displayName || currentUser.email?.split('@')[0] || 'Player';
+            const docId = `${userName}-Roboquest-Boss`;
+            const bossRef = doc(db, 'Roboquest-Boss', docId);
+            const bossSnap = await getDoc(bossRef);
+            
+            console.log("=== DEBUG BOSS DATA ===");
+            console.log("Document ID:", docId);
+            console.log("Exists:", bossSnap.exists());
+            
+            if (bossSnap.exists()) {
+                const data = bossSnap.data();
+                console.log("Full data:", JSON.stringify(data, null, 2));
+                
+                let totalWins = 0;
+                Object.entries(data).forEach(([bossName, bossStats]) => {
+                    console.log(`${bossName}:`, bossStats);
+                    if (bossStats && typeof bossStats === 'object') {
+                        totalWins += bossStats.wins || 0;
+                    }
+                });
+                console.log("Total wins:", totalWins);
+            }
+            console.log("======================");
+        } catch (error) {
+            console.log("Debug error:", error);
+        }
+    };
+
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (user) {
                 setCurrentUser(user);
                 await loadCurrentLoadout(user);
+                await loadUserData(user);
+                // Debug: Check boss data on load
+                await debugBossData();
             }
+            setIsLoading(false);
         });
 
         return () => unsubscribe();
@@ -790,6 +1558,7 @@ function MainMenuScreen() {
     useEffect(() => {
         if (isFocused && currentUser) {
             loadCurrentLoadout(currentUser);
+            loadUserData(currentUser);
         }
     }, [isFocused, currentUser]);
 
@@ -813,12 +1582,36 @@ function MainMenuScreen() {
             const nextState = !prev;
             Animated.timing(slideAnim, {
                 toValue: nextState ? 1 : 0,
-                duration: 300, 
+                duration: 300,
                 useNativeDriver: true,
             }).start();
             return nextState;
         });
     };
+
+    const closeQuestList = () => {
+        Animated.timing(slideAnim, {
+            toValue: 0,
+            duration: 300,
+            useNativeDriver: true,
+        }).start(() => {
+            setShowQuestList(false);
+        });
+    };
+
+    // Calculate notification count (unclaimed completed quests)
+    const notificationCount = quests.filter(q => q.isCompleted && !q.isClaimed).length;
+
+    if (isLoading) {
+        return (
+            <SafeAreaView style={styles.safeArea}>
+                <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="large" color={LIGHT_BLUE} />
+                    <Text style={styles.loadingText}>Loading...</Text>
+                </View>
+            </SafeAreaView>
+        );
+    }
 
     return (
         <SafeAreaView style={styles.safeArea}>
@@ -828,6 +1621,12 @@ function MainMenuScreen() {
                 show={showQuestList} 
                 slideAnim={slideAnim} 
                 questIconLayout={questIconLayout}
+                quests={quests}
+                onClaimQuest={claimQuestReward}
+                userScrapCoins={userScrapCoins}
+                onClose={closeQuestList}
+                onRefresh={refreshQuests}
+                claimingQuestId={claimingQuestId}
             />
 
             <ImageBackground 
@@ -842,6 +1641,7 @@ function MainMenuScreen() {
                     onSettingsPress={() => navigation.navigate('Settings')}
                     showQuestList={showQuestList}
                     questIconRef={questIconRef}
+                    notificationCount={notificationCount}
                 />
                 
                 <View style={styles.contentContainer}>
@@ -886,30 +1686,251 @@ function MainMenuScreen() {
     );
 }
 
+// ... styles remain exactly the same ...
+
 const questListStyles = StyleSheet.create({
     container: {
         position: 'absolute',
         backgroundColor: PANEL_DARK_BG,
-        borderRadius: responsiveScale(8), 
-        padding: responsiveScale(10), 
-        zIndex: 100, 
+        borderRadius: responsiveScale(12),
+        padding: responsiveScale(15),
+        paddingTop: responsiveScale(40),
+        zIndex: 1000,
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: responsiveScale(2) }, 
-        shadowOpacity: 0.5,
-        shadowRadius: responsiveScale(5), 
-        elevation: 10,
+        shadowOffset: { width: 0, height: responsiveScale(4) },
+        shadowOpacity: 0.8,
+        shadowRadius: responsiveScale(8),
+        elevation: 20,
+        maxHeight: SCREEN_HEIGHT * 0.9,
+        borderWidth: 2,
+        borderColor: LIGHT_BLUE,
     },
-    item: {
-        paddingVertical: responsiveScale(8), 
-        paddingHorizontal: responsiveScale(5), 
+    closeButton: {
+        position: 'absolute',
+        top: responsiveScale(10),
+        right: responsiveScale(10),
+        width: responsiveScale(30),
+        height: responsiveScale(30),
+        borderRadius: responsiveScale(15),
+        backgroundColor: 'rgba(255, 255, 255, 0.1)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 1001,
+    },
+    closeButtonText: {
+        color: LIGHT_GREY,
+        fontSize: responsiveFont(18),
+        fontWeight: 'bold',
+    },
+    header: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: responsiveScale(15),
+        paddingBottom: responsiveScale(10),
         borderBottomWidth: 1,
         borderBottomColor: ACCENT_GREY,
+        position: 'relative',
     },
-    text: {
+    refreshButton: {
+        position: 'absolute',
+        left: 0,
+        padding: responsiveScale(5),
+    },
+    refreshButtonText: {
+        color: LIGHT_BLUE,
+        fontSize: responsiveFont(18),
+        fontWeight: 'bold',
+    },
+    headerTitle: {
+        color: LIGHT_BLUE,
+        fontSize: responsiveFont(18),
+        fontWeight: 'bold',
+        flex: 1,
+        textAlign: 'center',
+    },
+    coinDisplay: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(255, 215, 0, 0.1)',
+        paddingHorizontal: responsiveScale(10),
+        paddingVertical: responsiveScale(5),
+        borderRadius: responsiveScale(20),
+        borderWidth: 1,
+        borderColor: GOLD_COIN,
+    },
+    headerCoinIcon: {
+        width: responsiveScale(20),
+        height: responsiveScale(20),
+        marginRight: responsiveScale(5),
+        tintColor: GOLD_COIN,
+    },
+    coinAmount: {
+        color: GOLD_COIN,
+        fontSize: responsiveFont(16),
+        fontWeight: 'bold',
+    },
+    notificationBanner: {
+        backgroundColor: 'rgba(0, 204, 102, 0.2)',
+        padding: responsiveScale(10),
+        borderRadius: responsiveScale(8),
+        marginBottom: responsiveScale(15),
+        borderWidth: 1,
+        borderColor: SUCCESS_GREEN,
+    },
+    notificationText: {
+        color: SUCCESS_GREEN,
+        fontSize: responsiveFont(14),
+        fontWeight: 'bold',
+        textAlign: 'center',
+    },
+    questItem: {
+        backgroundColor: DARK_ACCENT_GREY,
+        borderRadius: responsiveScale(10),
+        padding: responsiveScale(15),
+        marginBottom: responsiveScale(10),
+        borderWidth: 1,
+        borderColor: ACCENT_GREY,
+    },
+    questHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: responsiveScale(8),
+    },
+    questTitle: {
+        color: LIGHT_BLUE,
+        fontSize: responsiveFont(16),
+        fontWeight: 'bold',
+        flex: 1,
+    },
+    rewardContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(255, 215, 0, 0.1)',
+        paddingHorizontal: responsiveScale(8),
+        paddingVertical: responsiveScale(4),
+        borderRadius: responsiveScale(15),
+        borderWidth: 1,
+        borderColor: GOLD_COIN,
+    },
+    coinIcon: {
+        width: responsiveScale(16),
+        height: responsiveScale(16),
+        marginRight: responsiveScale(4),
+        tintColor: GOLD_COIN,
+    },
+    rewardText: {
+        color: GOLD_COIN,
+        fontSize: responsiveFont(14),
+        fontWeight: 'bold',
+    },
+    questDescription: {
         color: LIGHT_GREY,
-        fontSize: responsiveFont(16), 
-        fontWeight: '600',
-        textAlign: 'left',
+        fontSize: responsiveFont(12),
+        marginBottom: responsiveScale(12),
+        lineHeight: responsiveFont(16),
+    },
+    progressContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: responsiveScale(12),
+    },
+    progressBar: {
+        flex: 1,
+        height: responsiveScale(8),
+        backgroundColor: ACCENT_GREY,
+        borderRadius: responsiveScale(4),
+        overflow: 'hidden',
+        marginRight: responsiveScale(10),
+    },
+    progressFill: {
+        height: '100%',
+        backgroundColor: LIGHT_BLUE,
+        borderRadius: responsiveScale(4),
+    },
+    progressText: {
+        color: LIGHT_GREY,
+        fontSize: responsiveFont(12),
+        fontWeight: 'bold',
+        minWidth: responsiveScale(40),
+    },
+    claimButton: {
+        backgroundColor: SUCCESS_GREEN,
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingVertical: responsiveScale(12),
+        borderRadius: responsiveScale(8),
+        borderWidth: 1,
+        borderColor: '#00AA55',
+        gap: responsiveScale(8),
+    },
+    claimButtonDisabled: {
+        backgroundColor: '#888888',
+        borderColor: '#666666',
+    },
+    claimIcon: {
+        width: responsiveScale(16),
+        height: responsiveScale(16),
+        tintColor: '#FFFFFF',
+    },
+    claimText: {
+        color: '#FFFFFF',
+        fontSize: responsiveFont(14),
+        fontWeight: 'bold',
+    },
+    incompleteButton: {
+        backgroundColor: ACCENT_GREY,
+        paddingVertical: responsiveScale(12),
+        borderRadius: responsiveScale(8),
+        alignItems: 'center',
+    },
+    incompleteText: {
+        color: LIGHT_GREY,
+        fontSize: responsiveFont(14),
+        fontWeight: 'bold',
+    },
+    claimedButton: {
+        backgroundColor: 'rgba(255, 255, 255, 0.1)',
+        paddingVertical: responsiveScale(12),
+        borderRadius: responsiveScale(8),
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: SUCCESS_GREEN,
+        flexDirection: 'row',
+        justifyContent: 'center',
+        gap: responsiveScale(8),
+    },
+    claimedText: {
+        color: SUCCESS_GREEN,
+        fontSize: responsiveFont(14),
+        fontWeight: 'bold',
+    },
+    noQuestsContainer: {
+        backgroundColor: DARK_ACCENT_GREY,
+        borderRadius: responsiveScale(10),
+        padding: responsiveScale(30),
+        alignItems: 'center',
+        marginBottom: responsiveScale(10),
+    },
+    noQuestsText: {
+        color: LIGHT_BLUE,
+        fontSize: responsiveFont(16),
+        fontWeight: 'bold',
+        marginBottom: responsiveScale(5),
+    },
+    noQuestsSubText: {
+        color: LIGHT_GREY,
+        fontSize: responsiveFont(12),
+        textAlign: 'center',
+    },
+    refreshText: {
+        color: LIGHT_GREY,
+        fontSize: responsiveFont(10),
+        textAlign: 'center',
+        marginTop: responsiveScale(5),
+        fontStyle: 'italic',
     },
 });
 
@@ -923,33 +1944,44 @@ const styles = StyleSheet.create({
         width: '100%',
         height: '100%',
     },
+    loadingContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: HEADER_COLOR,
+        gap: responsiveScale(16),
+    },
+    loadingText: {
+        color: LIGHT_BLUE,
+        fontSize: responsiveFont(18),
+    },
     contentContainer: {
         flex: 1,
         width: '100%',
         height: '100%',
         justifyContent: 'space-between',
-        paddingVertical: responsiveScale(-1), 
-        marginTop: responsiveSpacing(80), 
+        paddingVertical: responsiveScale(-1),
+        marginTop: responsiveSpacing(80),
     },
     
     // Gray Header Styles 
     headerContainer: {
         position: 'absolute',
-        top: responsiveSpacing(10), 
+        top: responsiveSpacing(10),
         left: 0,
         right: 0,
-        height: responsiveSpacing(90), 
+        height: responsiveSpacing(90),
         backgroundColor: HEADER_COLOR,
         zIndex: 100,
         borderBottomWidth: 1,
         borderBottomColor: '#3A3A3A',
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: responsiveScale(2) }, 
+        shadowOffset: { width: 0, height: responsiveScale(2) },
         shadowOpacity: 0.3,
-        shadowRadius: responsiveScale(3), 
+        shadowRadius: responsiveScale(3),
         elevation: 5,
-        borderRadius: responsiveScale(10), 
-        paddingHorizontal: responsiveSpacing(15), 
+        borderRadius: responsiveScale(10),
+        paddingHorizontal: responsiveSpacing(15),
     },
     headerIconsContainer: {
         flexDirection: 'row',
@@ -960,6 +1992,7 @@ const styles = StyleSheet.create({
     headerLeft: {
         flex: 1,
         alignItems: 'flex-start',
+        position: 'relative',
     },
     headerRight: {
         flex: 1,
@@ -968,13 +2001,35 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     iconSpacer: {
-        width: responsiveSpacing(15), 
+        width: responsiveSpacing(15),
+    },
+    
+    // Notification badge
+    notificationBadge: {
+        position: 'absolute',
+        top: -responsiveScale(5),
+        right: -responsiveScale(5),
+        backgroundColor: '#FF3B30',
+        borderRadius: responsiveScale(10),
+        minWidth: responsiveScale(18),
+        height: responsiveScale(18),
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingHorizontal: responsiveScale(4),
+        borderWidth: 2,
+        borderColor: HEADER_COLOR,
+        zIndex: 10,
+    },
+    notificationText: {
+        color: '#FFFFFF',
+        fontSize: responsiveFont(10),
+        fontWeight: 'bold',
     },
     
     sparkContainer: {
         justifyContent: 'center',
         alignItems: 'center',
-        pointerEvents: 'none', 
+        pointerEvents: 'none',
     },
     sparkElement: {
         position: 'absolute',
@@ -985,26 +2040,27 @@ const styles = StyleSheet.create({
     
     // TOP ICON BUTTON STYLES 
     topIconButton: {
-        width: responsiveScale(50), 
-        height: responsiveScale(50), 
-        borderRadius: responsiveScale(25), 
+        width: responsiveScale(50),
+        height: responsiveScale(50),
+        borderRadius: responsiveScale(25),
         backgroundColor: 'rgba(255, 255, 255, 0.1)',
         justifyContent: 'center',
         alignItems: 'center',
-        borderWidth: responsiveScale(2), 
+        borderWidth: responsiveScale(2),
         borderColor: 'rgba(255, 255, 255, 0.2)',
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: responsiveScale(2) }, 
+        shadowOffset: { width: 0, height: responsiveScale(2) },
         shadowOpacity: 0.2,
-        shadowRadius: responsiveScale(3), 
+        shadowRadius: responsiveScale(3),
+        position: 'relative',
     },
     topIconButtonActive: {
         backgroundColor: 'rgba(0, 191, 255, 0.2)',
         borderColor: LIGHT_BLUE,
     },
     topIconImage: {
-        width: responsiveScale(26), 
-        height: responsiveScale(26), 
+        width: responsiveScale(26),
+        height: responsiveScale(26),
         tintColor: LIGHT_BLUE,
     },
     
@@ -1012,22 +2068,22 @@ const styles = StyleSheet.create({
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        marginTop: responsiveScale(-30), 
+        marginTop: responsiveScale(-30),
         zIndex: 1,
     },
     
     robotPreviewContainer: {
         alignItems: 'center',
         justifyContent: 'center',
-        marginBottom: responsiveScale(-80), 
+        marginBottom: responsiveScale(-80),
         zIndex: 1,
         position: 'relative',
     },
     robotStage: {
         width: SCREEN_WIDTH * 0.8,
         height: SCREEN_WIDTH * 0.8,
-        maxWidth: responsiveScale(350), 
-        maxHeight: responsiveScale(350), 
+        maxWidth: responsiveScale(350),
+        maxHeight: responsiveScale(350),
         justifyContent: 'center',
         alignItems: 'center',
         position: 'relative',
@@ -1051,34 +2107,34 @@ const styles = StyleSheet.create({
         width: '80%',
         alignSelf: 'center',
         marginBottom: responsiveScale(1),
-        paddingHorizontal: responsiveScale(.1), 
+        paddingHorizontal: responsiveScale(.1),
         zIndex: 10,
     },
-    bottomActionButtonsContainer: { 
+    bottomActionButtonsContainer: {
         flexDirection: 'row',
         justifyContent: 'space-around',
         width: '110%',
         alignSelf: 'center',
-        marginBottom: responsiveScale(90), 
-        paddingHorizontal: responsiveScale(.1), 
+        marginBottom: responsiveScale(90),
+        paddingHorizontal: responsiveScale(.1),
         zIndex: 10,
     },
     actionButton: {
         width: SCREEN_WIDTH * 0.30,
-        height: responsiveScale(35), 
-        borderRadius: responsiveScale(20), 
+        height: responsiveScale(35),
+        borderRadius: responsiveScale(20),
         backgroundColor: Transparent_BG,
         justifyContent: 'center',
         alignItems: 'center',
     },
     actionIcon: {
-        width: responsiveScale(25), 
-        height: responsiveScale(25), 
+        width: responsiveScale(25),
+        height: responsiveScale(25),
         tintColor: LIGHT_BLUE,
-        marginBottom: responsiveScale(3), 
+        marginBottom: responsiveScale(3),
     },
     actionLabel: {
-        fontSize: responsiveFont(8), 
+        fontSize: responsiveFont(8),
         fontWeight: 'bold',
         color: LIGHT_BLUE,
         textAlign: 'center',
@@ -1087,13 +2143,13 @@ const styles = StyleSheet.create({
     // Camera Button Styles
     cameraButtonOuterContainer: {
         alignItems: 'center',
-        marginBottom: responsiveScale(-6), 
-        marginTop: responsiveScale(10), 
+        marginBottom: responsiveScale(-6),
+        marginTop: responsiveScale(10),
         zIndex: 10,
     },
     cameraButton: {
         width: SCREEN_WIDTH * 0.3,
-        height: responsiveScale(55), 
+        height: responsiveScale(55),
         backgroundColor: Transparent_BG,
         justifyContent: 'center',
         alignItems: 'center',
@@ -1101,14 +2157,14 @@ const styles = StyleSheet.create({
         overflow: 'hidden',
     },
     cameraIcon: {
-        width: responsiveScale(35), 
-        height: responsiveScale(35), 
+        width: responsiveScale(35),
+        height: responsiveScale(35),
         tintColor: LIGHT_BLUE,
-        marginBottom: responsiveScale(1), 
+        marginBottom: responsiveScale(1),
         zIndex: 10,
     },
     cameraLabel: {
-        fontSize: responsiveFont(9), 
+        fontSize: responsiveFont(9),
         fontWeight: 'bold',
         color: LIGHT_BLUE,
         zIndex: 10,
@@ -1119,11 +2175,11 @@ const styles = StyleSheet.create({
         position: 'absolute',
         bottom: 0,
         left: 0,
-        width: responsiveScale(20), 
-        height: responsiveScale(20), 
+        width: responsiveScale(20),
+        height: responsiveScale(20),
         backgroundColor: Transparent_BG,
-        borderBottomWidth: responsiveScale(3), 
-        borderLeftWidth: responsiveScale(3), 
+        borderBottomWidth: responsiveScale(3),
+        borderLeftWidth: responsiveScale(3),
         borderColor: Indent_Color,
         zIndex: 1,
     },
@@ -1131,11 +2187,11 @@ const styles = StyleSheet.create({
         position: 'absolute',
         top: 0,
         right: 0,
-        width: responsiveScale(20), 
-        height: responsiveScale(20), 
+        width: responsiveScale(20),
+        height: responsiveScale(20),
         backgroundColor: Transparent_BG,
-        borderTopWidth: responsiveScale(3), 
-        borderRightWidth: responsiveScale(3), 
+        borderTopWidth: responsiveScale(3),
+        borderRightWidth: responsiveScale(3),
         borderColor: Indent_Color,
         zIndex: 1,
     },
@@ -1143,11 +2199,11 @@ const styles = StyleSheet.create({
         position: 'absolute',
         bottom: 0,
         right: 0,
-        width: responsiveScale(20), 
-        height: responsiveScale(20), 
+        width: responsiveScale(20),
+        height: responsiveScale(20),
         backgroundColor: Transparent_BG,
-        borderBottomWidth: responsiveScale(3), 
-        borderRightWidth: responsiveScale(3), 
+        borderBottomWidth: responsiveScale(3),
+        borderRightWidth: responsiveScale(3),
         borderColor: Indent_Color,
         zIndex: 1,
     },
@@ -1155,11 +2211,11 @@ const styles = StyleSheet.create({
         position: 'absolute',
         top: 0,
         left: 0,
-        width: responsiveScale(20), 
-        height: responsiveScale(20), 
+        width: responsiveScale(20),
+        height: responsiveScale(20),
         backgroundColor: Transparent_BG,
-        borderTopWidth: responsiveScale(3), 
-        borderLeftWidth: responsiveScale(3), 
+        borderTopWidth: responsiveScale(3),
+        borderLeftWidth: responsiveScale(3),
         borderColor: Indent_Color,
         zIndex: 1,
     },

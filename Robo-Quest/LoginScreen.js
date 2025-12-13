@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { 
   View, 
   Text, 
@@ -10,35 +10,76 @@ import {
   Modal, 
   TextInput,
   KeyboardAvoidingView,
-  Platform
+  Platform,
+  ImageBackground,
+  Easing
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
 import { auth, signInWithEmailAndPassword } from './database/firebase';
 
 const { width, height } = Dimensions.get('window');
 
 const TitleScreen = () => {
   const navigation = useNavigation();
-  const [showLogin, setShowLogin] = React.useState(false);
-  const [email, setEmail] = React.useState('');
-  const [password, setPassword] = React.useState('');
-  const [rememberMe, setRememberMe] = React.useState(false);
+  const [showLogin, setShowLogin] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
   
-  // Robot floating animation
-  const robotAnim = useRef(new Animated.Value(0)).current;
+  // Animation Values
+  const spinAnim = useRef(new Animated.Value(0)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const buttonPulse = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    // Animate robot floating
+    // 1. Fade in UI
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 1000,
+      useNativeDriver: true,
+    }).start();
+
+    // 2. Infinite Rotation for Cogwheel
+    Animated.loop(
+      Animated.timing(spinAnim, {
+        toValue: 1,
+        duration: 8000, 
+        easing: Easing.linear,
+        useNativeDriver: true,
+      })
+    ).start();
+
+    // 3. Pulse Breathing Effect for Gear
     Animated.loop(
       Animated.sequence([
-        Animated.timing(robotAnim, {
-          toValue: -15,
+        Animated.timing(pulseAnim, {
+          toValue: 1.1,
           duration: 2000,
           useNativeDriver: true,
         }),
-        Animated.timing(robotAnim, {
-          toValue: 0,
+        Animated.timing(pulseAnim, {
+          toValue: 1,
           duration: 2000,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+
+    // 4. Attention Pulse for Button
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(buttonPulse, {
+          toValue: 1.05,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(buttonPulse, {
+          toValue: 1,
+          duration: 1000,
           useNativeDriver: true,
         }),
       ])
@@ -54,10 +95,14 @@ const TitleScreen = () => {
   };
 
   const handleLogin = async () => {
+    setLoading(true);
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      navigation.navigate('Home'); // use React Navigation
+      setLoading(false);
+      setShowLogin(false);
+      navigation.navigate('Home'); 
     } catch (error) {
+      setLoading(false);
       if (error.code === 'auth/wrong-password') {
         alert('Incorrect email or password. Please try again.');
       } else if (error.code === 'auth/user-not-found') {
@@ -68,61 +113,66 @@ const TitleScreen = () => {
     }
   };
 
+  // Interpolate rotation
+  const spin = spinAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
+
   return (
     <View style={styles.container}>
       {/* Background */}
       <Image 
-        source={require('./assets/titlescreen/New_Clouds.png')}
+        source={require('./assets/background/NewLoadingBg.png')}
         style={styles.background}
         resizeMode="cover"
       />
+
+      {/* Dark Overlay for "Badass" Contrast */}
+      <View style={styles.overlay} />
 
       {/* Profile Icon - Top Right */}
       <TouchableOpacity 
         style={styles.profileButton}
         onPress={handleProfilePress}
       >
-        <Image 
-          source={require('./assets/titlescreen/profile.png')}
-          style={styles.profileIcon}
-          resizeMode="contain"
-        />
+        <Ionicons name="person" size={24} color="#FFF" />
       </TouchableOpacity>
 
-      <View style={styles.content}>
-        {/* Logo */}
-        <Image 
-          source={require('./assets/titlescreen/ROBOQUEST.png')}
-          style={styles.logo}
-          resizeMode="contain"
-        />
-
-        {/* Robot */}
-        <View style={styles.robotContainer}>
-          <Animated.View
+      {/* Main Content */}
+      <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
+        
+        {/* Centered Cogwheel Animation */}
+        <View style={styles.gearContainer}>
+          <Animated.Image 
+            source={require('./assets/icons/settings.png')}
             style={[
-              styles.robotAnimated,
+              styles.gear,
               {
-                transform: [{ translateY: robotAnim }],
-              },
+                transform: [
+                  { rotate: spin },
+                  { scale: pulseAnim }
+                ]
+              }
             ]}
-          >
-            <Image 
-              source={require('./assets/titlescreen/titlescreen_Robot.png')}
-              style={styles.robot}
-              resizeMode="contain"
-            />
-          </Animated.View>
+            resizeMode="contain"
+          />
+          {/* Inner "Core" Glow */}
+          <View style={styles.coreGlow} />
         </View>
 
-        {/* Tap to Play Button */}
-        <TouchableOpacity
-          style={styles.playButton}
-          onPress={handleStartGame}
-        >
-          <Text style={styles.playButtonText}>TAP TO PLAY</Text>
-        </TouchableOpacity>
-      </View>
+        {/* Tap to Play Button - Highly Visible */}
+        <Animated.View style={{ transform: [{ scale: buttonPulse }] }}>
+          <TouchableOpacity
+            style={styles.playButton}
+            onPress={handleStartGame}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.playButtonText}>TAP TO START</Text>
+          </TouchableOpacity>
+        </Animated.View>
+
+      </Animated.View>
 
       {/* Login Modal */}
       <Modal
@@ -144,16 +194,20 @@ const TitleScreen = () => {
               activeOpacity={1}
               onPress={(e) => e.stopPropagation()}
             >
-              <View style={styles.modalCard}>
-                <Text style={styles.modalTitle}>LOG IN</Text>
+              <View style={styles.glassCard}>
+                <View style={styles.headerContainer}>
+                  <Ionicons name="log-in-outline" size={40} color="#4b5563" style={{ marginBottom: 10 }} />
+                  <Text style={styles.modalTitle}>Welcome Back</Text>
+                  <Text style={styles.subtitle}>Sign in to continue your quest!</Text>
+                </View>
 
                 <View style={styles.form}>
                   {/* Email Input */}
                   <View style={styles.inputContainer}>
-                    <Text style={styles.label}>Email:</Text>
+                    <Ionicons name="mail-outline" size={20} color="#666" style={styles.inputIcon} />
                     <TextInput
                       style={styles.input}
-                      placeholder="Enter Email"
+                      placeholder="Email Address"
                       placeholderTextColor="#999"
                       value={email}
                       onChangeText={setEmail}
@@ -164,48 +218,63 @@ const TitleScreen = () => {
 
                   {/* Password Input */}
                   <View style={styles.inputContainer}>
-                    <Text style={styles.label}>Password:</Text>
+                    <Ionicons name="lock-closed-outline" size={20} color="#666" style={styles.inputIcon} />
                     <TextInput
                       style={styles.input}
-                      placeholder="Enter Password"
+                      placeholder="Password"
                       placeholderTextColor="#999"
                       value={password}
                       onChangeText={setPassword}
-                      secureTextEntry
+                      secureTextEntry={!showPassword}
                     />
+                    <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeIcon}>
+                       <Ionicons name={showPassword ? "eye-off-outline" : "eye-outline"} size={20} color="#666" />
+                    </TouchableOpacity>
                   </View>
 
                   {/* Remember Me Checkbox */}
                   <View style={styles.checkboxContainer}>
                     <TouchableOpacity
-                      style={styles.checkbox}
+                      style={styles.checkboxWrapper}
                       onPress={() => setRememberMe(!rememberMe)}
                     >
-                      {rememberMe && <View style={styles.checkboxChecked} />}
+                      <View style={[styles.checkbox, rememberMe && styles.checkboxChecked]}>
+                        {rememberMe && <Ionicons name="checkmark" size={12} color="#FFF" />}
+                      </View>
+                      <Text style={styles.checkboxLabel}>Remember me</Text>
                     </TouchableOpacity>
-                    <Text style={styles.checkboxLabel}>Remember me</Text>
-                    <Text style={styles.hintText}>
-                      This can be changed in the settings.
-                    </Text>
                   </View>
 
                   {/* Continue Button */}
                   <TouchableOpacity
                     style={styles.continueButton}
                     onPress={handleLogin}
+                    disabled={loading}
                   >
-                    <Text style={styles.continueButtonText}>Continue</Text>
+                    <Text style={styles.continueButtonText}>
+                      {loading ? "LOGGING IN..." : "LOG IN"}
+                    </Text>
                   </TouchableOpacity>
-                  {/* Sign Up Button Below Form */}
-                  <TouchableOpacity
-                    style={styles.modalSignUpButton}
-                    onPress={() => {
-                      setShowLogin(false);
-                      navigation.navigate('Signup');
-                    }}
-                  >
-                    <Text style={styles.modalSignUpButtonText}>Sign Up</Text>
-                  </TouchableOpacity>
+
+                  {/* Divider */}
+                  <View style={styles.dividerContainer}>
+                    <View style={styles.dividerLine} />
+                    <Text style={styles.dividerText}>OR</Text>
+                    <View style={styles.dividerLine} />
+                  </View>
+
+                  {/* Sign Up Button */}
+                  <View style={styles.footerContainer}>
+                    <Text style={styles.footerText}>Don't have an account?</Text>
+                    <TouchableOpacity 
+                      onPress={() => {
+                        setShowLogin(false);
+                        navigation.navigate('Signup');
+                      }}
+                    >
+                      <Text style={styles.linkText}>Sign Up</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               </View>
             </TouchableOpacity>
@@ -219,33 +288,33 @@ const TitleScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#87CEEB',
+    backgroundColor: '#000',
   },
   background: {
     position: 'absolute',
     width: width,
     height: height,
   },
+  overlay: {
+    position: 'absolute',
+    width: width,
+    height: height,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)', // Dark tint for UI pop
+  },
   profileButton: {
     position: 'absolute',
-    top: 40,
+    top: 50,
     right: 20,
-    zIndex: 10,
-    width: 50,
-    height: 50,
+    zIndex: 20,
+    width: 45,
+    height: 45,
     borderRadius: 25,
-    backgroundColor: '#FFAE00',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  profileIcon: {
-    width: 30,
-    height: 30,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    backdropFilter: 'blur(10px)', 
   },
   content: {
     flex: 1,
@@ -253,163 +322,198 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
   },
-  logo: {
-    width: width * 0.8,
-    height: 100,
-    marginTop: -50,
-    marginBottom: 20,
-  },
-  robotContainer: {
+  gearContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    maxHeight: 400,
+    position: 'relative',
+    marginTop: 40, 
   },
-  robotAnimated: {
-    width: width * 0.7,
-    height: 350,
+  gear: {
+    width: 150, // Reduced from 250 for a cleaner look
+    height: 150,
+    tintColor: '#FFFFFF',
+    shadowColor: "#FFAE00",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 20,
   },
-  robot: {
-    width: '100%',
-    height: '100%',
+  coreGlow: {
+    position: 'absolute',
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: 'rgba(255, 174, 0, 0.4)',
+    shadowColor: "#FFAE00",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 1,
+    shadowRadius: 30,
+    zIndex: -1,
   },
   playButton: {
-    width: width * 0.6,
-    paddingVertical: 16,
-    backgroundColor: '#7BA8C0',
-    borderRadius: 25,
-    marginBottom: 60,
-    shadowColor: '#000',
+    width: width * 0.75, // Slightly wider
+    paddingVertical: 20,
+    backgroundColor: '#FFAE00', // Solid Orange background for Max Visibility
+    borderRadius: 30,
+    marginBottom: 80,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    shadowColor: '#FFAE00',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
+    shadowOpacity: 0.6,
+    shadowRadius: 15,
+    elevation: 10,
+    alignItems: 'center',
   },
   playButtonText: {
-    color: '#000000',
-    fontSize: 20,
-    fontWeight: 'bold',
-    textAlign: 'center',
+    color: '#000000', // Black text on Orange for high contrast
+    fontSize: 22,
+    fontWeight: '900',
     letterSpacing: 2,
   },
+  
+  // MODAL STYLES
   modalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 16,
   },
   modalContainer: {
     width: '100%',
-    maxWidth: 320,
+    alignItems: 'center',
   },
-  modalCard: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 24,
+  glassCard: {
+    width: width * 0.85,
+    maxWidth: 400,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    borderRadius: 30,
+    paddingVertical: 35,
+    paddingHorizontal: 25,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
-    elevation: 16,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.4,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  headerContainer: {
+    alignItems: 'center',
+    marginBottom: 25,
   },
   modalTitle: {
-    fontSize: 24,
-    fontWeight: '900',
-    textAlign: 'center',
-    marginBottom: 24,
-    color: '#1f2937',
-    textTransform: 'uppercase',
-    letterSpacing: 2,
+    fontSize: 26,
+    fontWeight: '800',
+    color: '#333',
+    letterSpacing: 1,
+  },
+  subtitle: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 5,
+    fontWeight: '500',
   },
   form: {
     width: '100%',
   },
   inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F5F7FA',
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: '#E1E8ED',
     marginBottom: 16,
+    paddingHorizontal: 15,
+    height: 55,
   },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#374151',
-    marginBottom: 4,
+  inputIcon: {
+    marginRight: 10,
   },
   input: {
-    width: '100%',
-    padding: 8,
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 6,
-    fontSize: 14,
-    textAlign: 'center',
-    backgroundColor: '#fff',
+    flex: 1,
+    fontSize: 16,
+    color: '#333',
+    fontWeight: '600',
+  },
+  eyeIcon: {
+    padding: 5,
   },
   checkboxContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 24,
-    marginTop: 8,
+    marginBottom: 20,
+  },
+  checkboxWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   checkbox: {
-    width: 16,
-    height: 16,
+    width: 22,
+    height: 22,
     borderWidth: 2,
-    borderColor: '#6b7280',
-    borderRadius: 2,
+    borderColor: '#4A90E2',
+    borderRadius: 6,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 8,
+    marginRight: 10,
+    backgroundColor: '#FFF',
   },
   checkboxChecked: {
-    width: 10,
-    height: 10,
-    backgroundColor: '#6b7280',
-    borderRadius: 1,
+    backgroundColor: '#4A90E2',
   },
   checkboxLabel: {
-    fontSize: 12,
-    color: '#6b7280',
+    fontSize: 14,
+    color: '#555',
     fontWeight: '500',
-    flex: 1,
-  },
-  hintText: {
-    fontSize: 12,
-    color: '#9ca3af',
-    fontStyle: 'italic',
-    textAlign: 'right',
-    maxWidth: 150,
-    marginLeft: 8,
-  },
-   modalSignUpButton: {
-    marginTop: 12,
-    width: '100%',
-    paddingVertical: 12,
-    backgroundColor: '#4b5563',
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  modalSignUpButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
   },
   continueButton: {
-    width: '100%',
-    paddingVertical: 12,
-    backgroundColor: '#4b5563',
-    borderRadius: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
+    backgroundColor: '#4A90E2',
+    paddingVertical: 18,
+    borderRadius: 15,
+    shadowColor: '#4A90E2',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
+    alignItems: 'center',
+    marginBottom: 20,
   },
   continueButtonText: {
     color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-    textAlign: 'center',
+    fontSize: 18,
+    fontWeight: 'bold',
+    letterSpacing: 1.5,
+  },
+  dividerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#E0E0E0',
+  },
+  dividerText: {
+    marginHorizontal: 10,
+    color: '#999',
+    fontWeight: 'bold',
+    fontSize: 12,
+  },
+  footerContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 5,
+  },
+  footerText: {
+    color: '#666',
+    fontSize: 14,
+  },
+  linkText: {
+    color: '#4A90E2',
+    fontWeight: 'bold',
+    fontSize: 14,
   },
 });
 

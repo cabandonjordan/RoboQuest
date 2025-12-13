@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Speech from 'expo-speech';
 import { analyzeSelectedObject } from './aifunctions/gemini';
-import { auth, db, doc, setDoc, getDoc, onAuthStateChanged } from './database/firebase';
+import { auth, db, doc, setDoc, getDoc, onAuthStateChanged, updateDoc, increment } from './database/firebase';
 
 // Color constants (white theme - matching ResultScreen.js)
 const colors = {
@@ -76,36 +76,48 @@ function getRandomPartForCategory(category) {
   return partName;
 }
 
-// Function to save part to user's collection in Firebase
-async function savePartToCollection(partName, userId) {
-  if (!userId || !partName) {
-    console.log('Cannot save part: missing userId or partName');
-    return false;
-  }
+// REPLACED savePartToCollection with a more robust handler
+async function handlePartReward(partName, userId) {
+  if (!userId || !partName) return { success: false, type: 'error' };
 
   try {
     const userDocRef = doc(db, 'Roboquest-Collection', userId);
-    const userDoc = await getDoc(userDocRef);
+    const scrapRef = doc(db, 'Roboquest-Scraps', userId);
     
+    // 1. Get current collection
+    const userDoc = await getDoc(userDocRef);
     let parts = [];
     if (userDoc.exists()) {
-      const data = userDoc.data();
-      parts = data.parts || [];
+      parts = userDoc.data().parts || [];
     }
     
-    // Check if part already exists
+    // 2. Check if part exists
     if (!parts.includes(partName)) {
+      // -- NEW PART --
       parts.push(partName);
       await setDoc(userDocRef, { parts }, { merge: true });
       console.log(`✓ Saved part "${partName}" to collection`);
-      return true;
+      return { success: true, type: 'new_part' };
     } else {
-      console.log(`Part "${partName}" already in collection`);
-      return false;
+      // -- DUPLICATE PART (Convert to Scraps) --
+      const conversionAmount = 100; // Value for duplicate parts
+      
+      // Check if scrap doc exists first
+      const scrapDoc = await getDoc(scrapRef);
+      if (!scrapDoc.exists()) {
+        await setDoc(scrapRef, { coins: conversionAmount });
+      } else {
+        await updateDoc(scrapRef, {
+            coins: increment(conversionAmount)
+        });
+      }
+      
+      console.log(`Part "${partName}" duplicate. Converted to ${conversionAmount} scraps.`);
+      return { success: true, type: 'duplicate', amount: conversionAmount };
     }
   } catch (error) {
-    console.error('❌ Error saving part to collection:', error);
-    return false;
+    console.error('❌ Error handling part reward:', error);
+    return { success: false, type: 'error' };
   }
 }
 
@@ -163,6 +175,7 @@ export default function AnalyzeScreen() {
   const [currentPage, setCurrentPage] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
   const [awardedPart, setAwardedPart] = useState(null);
+  const [rewardDetails, setRewardDetails] = useState(null);
   const scrollX = React.useRef(new Animated.Value(0)).current;
   const speechRef = useRef(null);
 
@@ -220,19 +233,21 @@ export default function AnalyzeScreen() {
           const category = safeResult.category;
           if (category) {
             const partName = getRandomPartForCategory(category);
-            console.log(`🎁 Awarding part: ${partName} for category: ${category}`);
+            console.log(`🎁 Analyzed Category: ${category}. Attempting to award: ${partName}`);
             
-            // Store awarded part in state to display it
-            setAwardedPart(partName);
-            
-            // Get current user
             const currentUser = auth.currentUser;
             if (currentUser) {
-              const userId = currentUser.uid;
-              const isNewPart = await savePartToCollection(partName, userId);
+              const result = await handlePartReward(partName, currentUser.uid);
               
-              if (isNewPart) {
-                console.log(`✅ New part awarded: ${partName}`);
+              if (result.type === 'new_part') {
+                setAwardedPart(partName);
+                setRewardDetails(null);
+              } else if (result.type === 'duplicate') {
+                setAwardedPart(partName);
+                setRewardDetails({
+                    isDuplicate: true,
+                    amount: result.amount
+                });
               }
             } else {
               console.log('No user logged in, part not saved');
@@ -244,7 +259,7 @@ export default function AnalyzeScreen() {
         }
       })();
 
-      // Save to journal with analysis results (Firebase)
+      //QUest (journal) logic is here
       (async () => {
         try {
           const currentUser = auth.currentUser;
@@ -289,6 +304,7 @@ export default function AnalyzeScreen() {
 
     setIsAnalyzing(true);
     setAwardedPart(null); // Reset awarded part when starting new analysis
+    setRewardDetails(null);
 
     try {
       // Ensure boundingBox exists, create default if not
@@ -365,28 +381,25 @@ export default function AnalyzeScreen() {
         const category = safeResult.category;
         if (category) {
           const partName = getRandomPartForCategory(category);
-          console.log(`🎁 Awarding part: ${partName} for category: ${category}`);
           
-          // Store awarded part in state to display it
-          setAwardedPart(partName);
-          
-          // Get current user
           const currentUser = auth.currentUser;
           if (currentUser) {
-            const userId = currentUser.uid;
-            const isNewPart = await savePartToCollection(partName, userId);
+            const rewardResult = await handlePartReward(partName, currentUser.uid);
             
-            if (isNewPart) {
-              // Show success message (optional - you can customize this)
-              console.log(`✅ New part awarded: ${partName}`);
+            if (rewardResult.type === 'new_part') {
+                setAwardedPart(partName);
+                setRewardDetails(null);
+            } else if (rewardResult.type === 'duplicate') {
+                setAwardedPart(partName);
+                setRewardDetails({
+                    isDuplicate: true,
+                    amount: rewardResult.amount
+                });
             }
-          } else {
-            console.log('No user logged in, part not saved');
           }
         }
       } catch (partError) {
         console.error('❌ Error awarding part:', partError);
-        // Don't block the UI if part awarding fails
       }
 
       // Save to journal with analysis results (Firebase)
@@ -412,7 +425,6 @@ export default function AnalyzeScreen() {
         }
       } catch (storageError) {
         console.error('❌ Error saving journal entry:', storageError);
-        // Don't show error to user, just log it
       }
     } catch (error) {
       console.error('Error analyzing object:', error);
@@ -844,24 +856,45 @@ export default function AnalyzeScreen() {
                 <View style={styles.modalPage}>
                   <View style={styles.modalPageContent}>
                     <View style={styles.modalIconContainer}>
-                      <Ionicons name="gift" size={48} color={colors.secondary} />
+                      <Ionicons 
+                        name={rewardDetails?.isDuplicate ? "repeat" : "gift"} 
+                        size={48} 
+                        color={rewardDetails?.isDuplicate ? colors.warning : colors.secondary} 
+                      />
                     </View>
                     <View style={styles.titleRow}>
-                      <Text style={styles.modalPageTitle}>Part Unlocked!</Text>
+                      <Text style={styles.modalPageTitle}>
+                        {rewardDetails?.isDuplicate ? 'Duplicate Found' : 'Part Unlocked!'}
+                      </Text>
                     </View>
                     <View style={styles.partRewardContent}>
                       <Image 
                         source={PART_IMAGES[awardedPart]} 
                         style={[
                           styles.partRewardImage,
-                          awardedPart.startsWith('Engine') && styles.partRewardImageLarge
+                          awardedPart.startsWith('Engine') && styles.partRewardImageLarge,
+                          rewardDetails?.isDuplicate && { opacity: 0.8 }
                         ]}
                         resizeMode="contain"
                       />
                       <Text style={styles.partRewardName}>{awardedPart}</Text>
-                      <Text style={styles.partRewardSubtext}>
-                        This part has been added to your collection!
-                      </Text>
+                      
+                      {rewardDetails?.isDuplicate ? (
+                          <View style={styles.duplicateContainer}>
+                              <Text style={styles.partRewardSubtext}>
+                                You already own this part.
+                              </Text>
+                              <View style={styles.conversionBadge}>
+                                  <Text style={styles.conversionText}>
+                                    Converted to {rewardDetails.amount} Scrap Coins
+                                  </Text>
+                              </View>
+                          </View>
+                      ) : (
+                          <Text style={styles.partRewardSubtext}>
+                            This part has been added to your collection!
+                          </Text>
+                      )}
                     </View>
                   </View>
                 </View>
@@ -1364,5 +1397,20 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 8,
   },
+  duplicateContainer: {
+      alignItems: 'center',
+      gap: 10,
+  },
+  conversionBadge: {
+      backgroundColor: '#FFD700', // Gold color for scraps
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      borderRadius: 20,
+      marginTop: 5,
+  },
+  conversionText: {
+      color: '#000',
+      fontWeight: 'bold',
+      fontSize: 14,
+  }
 });
-

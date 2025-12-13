@@ -18,7 +18,8 @@ import {
   updatePassword,
   reauthenticateWithCredential,
   EmailAuthProvider,
-  deleteUser
+  deleteUser,
+  signOut
 } from "firebase/auth";
 import {
   getFirestore,
@@ -33,7 +34,9 @@ import {
   collection,
   onSnapshot,
   query,
-  where
+  where,
+  writeBatch,
+  increment
 } from "firebase/firestore";
 
 const firebaseConfig = {
@@ -69,6 +72,7 @@ export {
   reauthenticateWithCredential,
   EmailAuthProvider,
   deleteUser,
+  signOut,
   doc,
   setDoc,
   getDocs,
@@ -80,5 +84,7 @@ export {
   collection,
   onSnapshot,
   query,
-  where
+  where,
+  writeBatch,
+  increment
 };

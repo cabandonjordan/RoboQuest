@@ -6,12 +6,27 @@ import {
   TouchableOpacity,
   Switch,
   Dimensions,
+  TextInput,
+  Alert,
+  ActivityIndicator
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import Slider from '@react-native-community/slider';
 import { Audio } from 'expo-av';
 import BackgroundMusicManager from './services/BackgroundMusicManager';
 import { useAudio } from './contexts/AudioContext';
+// Added Firebase imports for Logout and Database operations
+import { 
+    auth, 
+    signOut, 
+    updateProfile, 
+    db, 
+    doc, 
+    getDoc, 
+    setDoc, 
+    deleteDoc, 
+    updateDoc 
+} from './database/firebase';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -47,11 +62,16 @@ function SettingsScreen() {
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [vibrationsEnabled, setVibrationsEnabled] = useState(false);
   const [showAudioModal, setShowAudioModal] = useState(false);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+  
+  // --- New State for Name Change ---
+  const [showNameModal, setShowNameModal] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [isUpdatingName, setIsUpdatingName] = useState(false);
+
   const isInitialMount = useRef(true);
 
   // Control background music playback based on musicEnabled state
-  // Skip on initial mount to avoid restarting music when opening settings
   useEffect(() => {
     if (isInitialMount.current) {
       isInitialMount.current = false;
@@ -84,21 +104,129 @@ function SettingsScreen() {
     setShowAudioModal(false);
   };
 
-  const handleDeletePress = () => {
-    setShowDeleteModal(true);
+  // Replaces handleDeletePress
+  const handleLogoutPress = () => {
+    setShowLogoutModal(true);
   };
 
-  const handleCloseDeleteModal = () => {
+  // Replaces handleCloseDeleteModal
+  const handleCloseLogoutModal = () => {
     playButtonSound();
-    setShowDeleteModal(false);
+    setShowLogoutModal(false);
   };
 
-  const handleConfirmDelete = () => {
+  // Replaces handleConfirmDelete
+  const handleConfirmLogout = async () => {
     playButtonSound();
-    console.log('Account deletion confirmed');
-    // Add actual account deletion logic here
-    setShowDeleteModal(false);
-    // navigation.navigate('LoginScreen'); // Navigate to login after deletion
+    try {
+        await signOut(auth);
+        setShowLogoutModal(false);
+        // Navigate back to LoginScreen and reset history so user can't go back
+        navigation.reset({
+            index: 0,
+            routes: [{ name: 'LoginScreen' }],
+        });
+    } catch (error) {
+        console.error("Error logging out: ", error);
+        setShowLogoutModal(false);
+    }
+  };
+
+  // --- Change Name Logic ---
+  const handleChangeNamePress = () => {
+    playButtonSound();
+    if (auth.currentUser) {
+        setNewName(auth.currentUser.displayName || '');
+    }
+    setShowNameModal(true);
+  };
+
+  const handleCloseNameModal = () => {
+    playButtonSound();
+    setShowNameModal(false);
+    setIsUpdatingName(false);
+  };
+
+  // Helper to move a document from one ID to another
+  const migrateCollection = async (collectionName, oldId, newId) => {
+      try {
+          const oldDocRef = doc(db, collectionName, oldId);
+          const newDocRef = doc(db, collectionName, newId);
+          
+          const oldDocSnap = await getDoc(oldDocRef);
+          
+          if (oldDocSnap.exists()) {
+              const data = oldDocSnap.data();
+              // Save to new ID
+              await setDoc(newDocRef, data);
+              // Delete old ID
+              await deleteDoc(oldDocRef);
+              console.log(`Migrated ${collectionName}: ${oldId} -> ${newId}`);
+          }
+      } catch (error) {
+          console.error(`Error migrating ${collectionName}:`, error);
+      }
+  };
+
+  const handleSaveName = async () => {
+      playButtonSound();
+      if (newName.trim().length === 0) {
+          Alert.alert("Invalid Name", "Please enter a valid name.");
+          return;
+      }
+      
+      setIsUpdatingName(true);
+
+      try {
+          const user = auth.currentUser;
+          if (user) {
+              const oldName = user.displayName;
+              const nameToUpdate = newName.trim();
+
+              // 1. Update Firebase Auth Profile
+              await updateProfile(user, {
+                  displayName: nameToUpdate
+              });
+
+              // 2. Update Roboquest-Users (Field Update)
+              const userDocRef = doc(db, 'Roboquest-Users', user.uid);
+              try {
+                  const userSnap = await getDoc(userDocRef);
+                  if (userSnap.exists()) {
+                      await updateDoc(userDocRef, { username: nameToUpdate });
+                  } else {
+                      await setDoc(userDocRef, { username: nameToUpdate, email: user.email });
+                  }
+              } catch (e) {
+                  console.log("Error updating user doc:", e);
+              }
+
+              // 3. Migrate Collections that rely on Username as the Document ID
+              if (oldName && oldName !== nameToUpdate) {
+                  // A. Migrate Unlocked Parts
+                  // Pattern: Collection 'Roboquest-UnlockedParts', DocID: username
+                  await migrateCollection('Roboquest-UnlockedParts', oldName, nameToUpdate);
+
+                  // B. Migrate Boss Stats
+                  // Pattern: Collection 'Roboquest-Boss', DocID: username-Roboquest-Boss
+                  await migrateCollection(
+                      'Roboquest-Boss', 
+                      `${oldName}-Roboquest-Boss`, 
+                      `${nameToUpdate}-Roboquest-Boss`
+                  );
+                  
+                  // Add any other collections here if they use username as ID
+              }
+
+              Alert.alert("Success", "Name updated successfully!");
+              setShowNameModal(false);
+          }
+      } catch (error) {
+          console.error("Error updating name:", error);
+          Alert.alert("Error", "Could not update name. Please try again.");
+      } finally {
+          setIsUpdatingName(false);
+      }
   };
 
   return (
@@ -118,9 +246,10 @@ function SettingsScreen() {
           </View>
 
           <View style={styles.gridRow}>
-            <BlueButton style={styles.gridItem}>Change Name</BlueButton>
-            <TouchableOpacity style={[styles.blueButton, styles.gridItem, styles.deleteButton]} onPress={() => { playButtonSound(); handleDeletePress(); }} activeOpacity={0.8}>
-              <Text style={styles.blueButtonText}>Delete Account</Text>
+            <BlueButton style={styles.gridItem} onPress={handleChangeNamePress}>Change Name</BlueButton>
+            {/* Updated button to Log Out */}
+            <TouchableOpacity style={[styles.blueButton, styles.gridItem, styles.logoutButton]} onPress={() => { playButtonSound(); handleLogoutPress(); }} activeOpacity={0.8}>
+              <Text style={styles.blueButtonText}>Log Out</Text>
             </TouchableOpacity>
           </View>
 
@@ -225,31 +354,77 @@ function SettingsScreen() {
         </View>
       )}
 
-      {/* Delete Account Confirmation Modal */}
-      {showDeleteModal && (
+      {/* Change Name Modal */}
+      {showNameModal && (
+          <View style={styles.audioModalOverlay}>
+              <View style={styles.logoutModalContainer}>
+                  <View style={styles.logoutModalHeader}>
+                      <Text style={[styles.logoutModalTitle, {color: '#fff'}]}>Change Name</Text>
+                      <TouchableOpacity style={[styles.modalCloseButton, {backgroundColor: '#6b9ac4'}]} onPress={handleCloseNameModal}>
+                          <Text style={styles.closeText}>✕</Text>
+                      </TouchableOpacity>
+                  </View>
+                  
+                  <View style={styles.logoutContent}>
+                    {isUpdatingName ? (
+                        <View style={{padding: 20, alignItems: 'center'}}>
+                            <ActivityIndicator size="large" color="#4CAF50" />
+                            <Text style={[styles.logoutSubText, {marginTop: 10}]}>Updating all records...</Text>
+                        </View>
+                    ) : (
+                        <>
+                          <Text style={styles.logoutWarningText}>Enter your new display name:</Text>
+                          <TextInput 
+                              style={styles.nameInput}
+                              value={newName}
+                              onChangeText={setNewName}
+                              placeholder="Player Name"
+                              maxLength={15}
+                          />
+                          
+                          <View style={styles.logoutButtonsRow}>
+                              <TouchableOpacity style={styles.cancelButton} onPress={handleCloseNameModal}>
+                                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                              </TouchableOpacity>
+                              <TouchableOpacity 
+                                  style={[styles.confirmLogoutButton, {backgroundColor: '#4CAF50', borderColor: '#2e7d32'}]} 
+                                  onPress={handleSaveName}
+                              >
+                                  <Text style={styles.confirmLogoutText}>Save</Text>
+                              </TouchableOpacity>
+                          </View>
+                        </>
+                    )}
+                  </View>
+              </View>
+          </View>
+      )}
+
+      {/* Log Out Confirmation Modal (Replaces Delete Modal) */}
+      {showLogoutModal && (
         <View style={styles.audioModalOverlay}>
-          <View style={styles.deleteModalContainer}>
-            <View style={styles.deleteModalHeader}>
-              <Text style={styles.deleteModalTitle}>Delete Account</Text>
-              <TouchableOpacity style={styles.modalCloseButton} onPress={handleCloseDeleteModal}>
+          <View style={styles.logoutModalContainer}>
+            <View style={styles.logoutModalHeader}>
+              <Text style={styles.logoutModalTitle}>Log Out</Text>
+              <TouchableOpacity style={styles.modalCloseButton} onPress={handleCloseLogoutModal}>
                 <Text style={styles.closeText}>✕</Text>
               </TouchableOpacity>
             </View>
 
-            <View style={styles.deleteContent}>
-              <Text style={styles.deleteWarningText}>
-                Are you sure you want to delete your account?
+            <View style={styles.logoutContent}>
+              <Text style={styles.logoutWarningText}>
+                Are you sure you want to log out?
               </Text>
-              <Text style={styles.deleteSubText}>
-                This action cannot be undone. All your data will be permanently deleted.
+              <Text style={styles.logoutSubText}>
+                You will be returned to the login screen.
               </Text>
 
-              <View style={styles.deleteButtonsRow}>
-                <TouchableOpacity style={styles.cancelButton} onPress={handleCloseDeleteModal}>
+              <View style={styles.logoutButtonsRow}>
+                <TouchableOpacity style={styles.cancelButton} onPress={handleCloseLogoutModal}>
                   <Text style={styles.cancelButtonText}>Cancel</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.confirmDeleteButton} onPress={handleConfirmDelete}>
-                  <Text style={styles.confirmDeleteText}>Delete</Text>
+                <TouchableOpacity style={styles.confirmLogoutButton} onPress={handleConfirmLogout}>
+                  <Text style={styles.confirmLogoutText}>Log Out</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -258,7 +433,9 @@ function SettingsScreen() {
       )}
     </View>
   );
-}const styles = StyleSheet.create({
+}
+
+const styles = StyleSheet.create({
   screenContainer: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
@@ -460,12 +637,12 @@ function SettingsScreen() {
     width: '100%',
     height: 40,
   },
-  // Delete Button Style
-  deleteButton: {
-    backgroundColor: '#e74c3c',
+  // Logout Button Style (formerly Delete Button)
+  logoutButton: {
+    backgroundColor: '#e74c3c', // Kept red as requested/common for logout
   },
-  // Delete Confirmation Modal Styles
-  deleteModalContainer: {
+  // Logout Confirmation Modal Styles (formerly Delete Modal)
+  logoutModalContainer: {
     width: SCREEN_WIDTH * 0.85,
     maxWidth: 380,
     backgroundColor: '#5a6c7d',
@@ -475,14 +652,14 @@ function SettingsScreen() {
     padding: 20,
     paddingTop: 20,
   },
-  deleteModalHeader: {
+  logoutModalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 20,
     position: 'relative',
   },
-  deleteModalTitle: {
+  logoutModalTitle: {
     fontSize: 22,
     fontWeight: '800',
     textAlign: 'center',
@@ -502,26 +679,26 @@ function SettingsScreen() {
     justifyContent: 'center',
     alignItems: 'center',
   },
-  deleteContent: {
+  logoutContent: {
     backgroundColor: '#d4dce4',
     borderRadius: 8,
     padding: 20,
   },
-  deleteWarningText: {
+  logoutWarningText: {
     fontSize: 18,
     fontWeight: '700',
     color: '#2d3e50',
     textAlign: 'center',
     marginBottom: 15,
   },
-  deleteSubText: {
+  logoutSubText: {
     fontSize: 14,
     color: '#5a6c7d',
     textAlign: 'center',
     marginBottom: 25,
     lineHeight: 20,
   },
-  deleteButtonsRow: {
+  logoutButtonsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     gap: 10,
@@ -541,7 +718,7 @@ function SettingsScreen() {
     textAlign: 'center',
     textTransform: 'uppercase',
   },
-  confirmDeleteButton: {
+  confirmLogoutButton: {
     flex: 1,
     backgroundColor: '#e74c3c',
     paddingVertical: 14,
@@ -549,13 +726,24 @@ function SettingsScreen() {
     borderWidth: 3,
     borderColor: '#c0392b',
   },
-  confirmDeleteText: {
+  confirmLogoutText: {
     fontSize: 16,
     fontWeight: '800',
     color: '#fff',
     textAlign: 'center',
     textTransform: 'uppercase',
   },
+  // New Styles for Input
+  nameInput: {
+      backgroundColor: '#FFF',
+      borderRadius: 8,
+      padding: 12,
+      fontSize: 18,
+      marginBottom: 20,
+      borderWidth: 2,
+      borderColor: '#8a98a6',
+      textAlign: 'center'
+  }
 });
 
 export default SettingsScreen;
