@@ -13,6 +13,31 @@ import {
 } from "react-native";
 import { auth, db, doc, getDoc, setDoc, onAuthStateChanged, updateDoc } from './database/firebase';
 
+// Preload chest images for better performance
+const CHEST_IMAGES = {
+  common: require('./assets/shop/Common2_Chest.png'),
+  rare: require('./assets/shop/Rare1_Chest_Chest.png'),
+  legendary: require('./assets/shop/Legendary_Chest_Closed.png'),
+};
+
+const COIN_IMAGE = require('./assets/icons/coin.png');
+
+// Part images mapping
+const PART_IMAGES = {
+  'WeaponInnovare': require('./assets/parts/weapons/WeaponInnovare.png'),
+  'WeaponCreativia': require('./assets/parts/weapons/WeaponCreativia.png'),
+  'WeaponGeneralis': require('./assets/parts/weapons/WeaponGeneralis.png'),
+  'ChassisInnovare': require('./assets/parts/chassis/ChassisInnovare.png'),
+  'ChassisCreativia': require('./assets/parts/chassis/ChassisCreativia.png'),
+  'ChassisGeneralis': require('./assets/parts/chassis/ChassisGeneralis.png'),
+  'WheelsInnovare': require('./assets/parts/wheels/WheelsInnovare.png'),
+  'WheelsCreativia': require('./assets/parts/wheels/WheelsCreativia.png'),
+  'WheelsGeneralis': require('./assets/parts/wheels/WheelsGeneralis.png'),
+  'EngineInnovare': require('./assets/parts/engines/EngineInnovare.png'),
+  'EngineCreativia': require('./assets/parts/engines/EngineCreativia.png'),
+  'EngineGeneralis': require('./assets/parts/engines/EngineGeneralis.png'),
+};
+
 // List of all possible parts (Innovare and Creativia only)
 const POSSIBLE_PARTS = [
   'WeaponInnovare', 'WeaponCreativia',
@@ -519,11 +544,11 @@ const ShopScreen = () => {
   };
 
   const getChestImage = (chestId) => {
-    switch(chestId) {
-      case 'legendary': return require('./assets/shop/Legendary_Chest_Closed.png');
-      case 'rare': return require('./assets/shop/Rare_Chest_Closed.png');
-      default: return require('./assets/shop/Common1_Chest_Closed.png');
-    }
+    return CHEST_IMAGES[chestId] || CHEST_IMAGES.common;
+  };
+
+  const getPartImage = (partName) => {
+    return PART_IMAGES[partName] || PART_IMAGES['ChassisGeneralis'];
   };
 
   return (
@@ -636,12 +661,17 @@ const ShopScreen = () => {
             {rewardResult.type === 'part' ? (
               <View style={styles.partReward}>
                 <View style={[
-                  styles.partIcon,
+                  styles.partIconContainer,
                   { 
-                    backgroundColor: rewardResult.wasNew ? '#4A90E2' : '#FFD700',
-                    borderColor: rewardResult.wasNew ? '#2A70C2' : '#FFA500'
+                    borderColor: rewardResult.wasNew ? '#4A90E2' : '#FFD700'
                   }
-                ]} />
+                ]}>
+                  <Image 
+                    source={getPartImage(rewardResult.part)}
+                    style={styles.partIcon}
+                    resizeMode="contain"
+                  />
+                </View>
                 <Text style={styles.partName}>{getPartDisplayName(rewardResult.part)}</Text>
                 <Text style={styles.partCategory}>{getPartCategory(rewardResult.part)}</Text>
                 {rewardResult.wasNew && (
@@ -650,7 +680,11 @@ const ShopScreen = () => {
               </View>
             ) : (
               <View style={styles.scrapReward}>
-                <View style={styles.coinIconLarge} />
+                <Image 
+                  source={COIN_IMAGE}
+                  style={styles.coinIconLarge}
+                  resizeMode="contain"
+                />
                 <Text style={styles.scrapAmount}>+{rewardResult.scrapGained}</Text>
                 <Text style={styles.scrapLabel}>Scrap Coins</Text>
               </View>
@@ -854,12 +888,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 20,
   },
-  partIcon: {
-    width: 80,
-    height: 80,
+  partIconContainer: {
+    width: 120,
+    height: 120,
     borderRadius: 15,
     borderWidth: 3,
     marginBottom: 10,
+    backgroundColor: '#1a1a1a',
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+  },
+  partIcon: {
+    width: '100%',
+    height: '100%',
   },
   partName: {
     color: '#ffffff',
@@ -889,10 +931,6 @@ const styles = StyleSheet.create({
   coinIconLarge: {
     width: 80,
     height: 80,
-    backgroundColor: '#FFD700',
-    borderRadius: 40,
-    borderWidth: 3,
-    borderColor: '#FFA500',
     marginBottom: 10,
   },
   scrapAmount: {
