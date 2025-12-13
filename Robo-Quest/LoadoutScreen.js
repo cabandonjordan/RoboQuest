@@ -1005,6 +1005,7 @@ function LoadoutScreen() {
     };
 
     const handleEquip = (category, partName) => {
+        // Check if the part is unlocked
         if (!isPartUnlocked(partName)) {
             Alert.alert(
                 "Part Locked 🔒",
@@ -1017,16 +1018,22 @@ function LoadoutScreen() {
             return;
         }
         
-        const isAlreadyEquipped = loadout[category] === partName;
+        // --- FIX START ---
+        // If the part is already equipped, do nothing. 
+        // This prevents unequipping and keeps the current part static.
+        if (loadout[category] === partName) {
+            return;
+        }
+        // --- FIX END ---
+        
+        // If it's a different part, equip it
         const newLoadout = {
             ...loadout,
-            [category]: isAlreadyEquipped ? null : partName
+            [category]: partName
         };
         
         setLoadout(newLoadout);
-        if (!isAlreadyEquipped) {
-            triggerEquipSpark();
-        }
+        triggerEquipSpark();
         
         if (selectedPreset) {
             const newPresets = {
