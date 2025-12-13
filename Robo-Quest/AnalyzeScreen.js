@@ -170,6 +170,7 @@ export default function AnalyzeScreen() {
   const [selectedObject, setSelectedObject] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [imageLayout, setImageLayout] = useState({ width: 0, height: 0, x: 0, y: 0 });
+  const [imageNaturalSize, setImageNaturalSize] = useState({ width: 0, height: 0 });
   const [showResultModal, setShowResultModal] = useState(false);
   const [analysisResult, setAnalysisResult] = useState(null);
   const [currentPage, setCurrentPage] = useState(0);
@@ -293,6 +294,11 @@ export default function AnalyzeScreen() {
   const handleImageLayout = (event) => {
     const { width, height, x, y } = event.nativeEvent.layout;
     setImageLayout({ width, height, x, y });
+  };
+
+  const handleImageLoad = (event) => {
+    const { width, height } = event.nativeEvent.source;
+    setImageNaturalSize({ width, height });
   };
 
   const handleBoxTap = (object) => {
@@ -565,10 +571,11 @@ export default function AnalyzeScreen() {
           style={styles.image}
           resizeMode="contain"
           onLayout={handleImageLayout}
+          onLoad={handleImageLoad}
         />
 
         {/* Render bounding boxes */}
-        {imageLayout.width > 0 && detectedObjects.map((object, index) => {
+        {imageLayout.width > 0 && imageNaturalSize.width > 0 && detectedObjects.map((object, index) => {
           // Default bounding box if not provided
           const boundingBox = object.boundingBox || {
             x: 25 + (index * 10),
@@ -577,10 +584,31 @@ export default function AnalyzeScreen() {
             height: 30,
           };
 
-          const boxLeft = (boundingBox.x / 100) * imageLayout.width;
-          const boxTop = (boundingBox.y / 100) * imageLayout.height;
-          const boxWidth = (boundingBox.width / 100) * imageLayout.width;
-          const boxHeight = (boundingBox.height / 100) * imageLayout.height;
+          // Calculate the actual display size of the image (accounting for contain mode)
+          const imageAspectRatio = imageNaturalSize.width / imageNaturalSize.height;
+          const containerAspectRatio = imageLayout.width / imageLayout.height;
+          
+          let displayWidth, displayHeight, offsetX, offsetY;
+          
+          if (imageAspectRatio > containerAspectRatio) {
+            // Image is wider - fit to width
+            displayWidth = imageLayout.width;
+            displayHeight = imageLayout.width / imageAspectRatio;
+            offsetX = 0;
+            offsetY = (imageLayout.height - displayHeight) / 2;
+          } else {
+            // Image is taller - fit to height
+            displayHeight = imageLayout.height;
+            displayWidth = imageLayout.height * imageAspectRatio;
+            offsetX = (imageLayout.width - displayWidth) / 2;
+            offsetY = 0;
+          }
+
+          // Calculate box position relative to the actual displayed image
+          const boxLeft = offsetX + (boundingBox.x / 100) * displayWidth;
+          const boxTop = offsetY + (boundingBox.y / 100) * displayHeight;
+          const boxWidth = (boundingBox.width / 100) * displayWidth;
+          const boxHeight = (boundingBox.height / 100) * displayHeight;
 
           const isSelected = selectedObject?.name === object.name;
           const boxColor = isSelected ? colors.secondary : colors.primary;
@@ -727,8 +755,7 @@ export default function AnalyzeScreen() {
             speechRef.current = null;
           }
           setShowResultModal(false);
-          setAwardedPart(null); // Reset awarded part when closing modal
-          // Navigate back to Camera screen
+          setAwardedPart(null);
           navigation.reset({
             index: 0,
             routes: [{ name: 'Home' }],
@@ -749,14 +776,12 @@ export default function AnalyzeScreen() {
               </View>
               <TouchableOpacity
                 onPress={() => {
-                  // Stop any ongoing speech when leaving
                   if (speechRef.current) {
                     Speech.stop();
                     speechRef.current = null;
                   }
                   setShowResultModal(false);
-                  setAwardedPart(null); // Reset awarded part when closing modal
-                  // Navigate back to Camera screen
+                  setAwardedPart(null);
                   navigation.navigate('Camera');
                 }}
                 style={styles.closeButton}
@@ -779,7 +804,6 @@ export default function AnalyzeScreen() {
                 onMomentumScrollEnd={(e) => {
                   const page = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
                   setCurrentPage(page);
-                  // Stop any ongoing speech when switching pages
                   if (speechRef.current) {
                     Speech.stop();
                     speechRef.current = null;
@@ -851,7 +875,7 @@ export default function AnalyzeScreen() {
                 </View>
               </View>
 
-              {/* Part Reward Page - Only show if part was awarded */}
+              {/* Part Reward Page */}
               {awardedPart && PART_IMAGES[awardedPart] && (
                 <View style={styles.modalPage}>
                   <View style={styles.modalPageContent}>
@@ -1402,7 +1426,7 @@ const styles = StyleSheet.create({
       gap: 10,
   },
   conversionBadge: {
-      backgroundColor: '#FFD700', // Gold color for scraps
+      backgroundColor: '#FFD700',
       paddingHorizontal: 16,
       paddingVertical: 8,
       borderRadius: 20,
